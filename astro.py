@@ -34,7 +34,6 @@ def get_data(data):
         print("Clicked resolve button")
         # SET OBS TIME
         obs_time = wait.until(EC.presence_of_element_located((By.NAME, "query[duration]")))
-         
         print("entered time") 
         # DO CAPTCHA
         commit_button = wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'recaptcha-checkbox-border')))
