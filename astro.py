@@ -54,3 +54,6 @@ def get_data(data):
 data = pd.read_csv("BrowseTargets.csv", delimiter='|', header=0, skipinitialspace=True, )
 #print(data)
 get_data(data)
+
+
+
