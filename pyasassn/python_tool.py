@@ -42,12 +42,13 @@ def plot():
 def load_galaxys(data):
     client = SkyPatrolClient()
     my_tic_ids = [6658326,46783395,1021890,2798421]
-    test = client.cone_search(ra_deg=270, dec_deg=88, radius=4, catalog='aavsovsx')
+    #test = client.cone_search(ra_deg=270, dec_deg=88, radius=4, catalog='aavsovsx')
+    #test = client.query_list(my_tic_ids, catalog = "stellar_main", id_col = "tic_id", download=True)
+    test = client.cone_search('18:54:11.5',' -88:02:55.22' ,radius =2.0 ,units='deg')
     print(test)
-    test = client.query_list(my_tic_ids, catalog = "stellar_main", id_col = "tic_id")
-    test = client.random_sample(1000, catalog = "morx")
-    print(test)
-data = load_data(filename)
+    print(test.stats())
+#data = load_data(filename)
+data = "eh"
 load_galaxys(data)
 
 

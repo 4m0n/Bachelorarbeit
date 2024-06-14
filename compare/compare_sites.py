@@ -50,7 +50,7 @@ def JD_to_HJD(ra, dec, location, data):
     return new_data
     
 for y1, y2 in amplitude:
-    sp1 = pd.read_csv("skypatrol1.csv")
+    sp1 = pd.read_csv("skypatrol1_flux.csv")
     sp21 = pd.read_csv("sp2_661430329816.csv")
     sp22 = pd.read_csv("sp2_661430607288.csv")
 
