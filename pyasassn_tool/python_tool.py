@@ -119,15 +119,12 @@ def test():
 #============================
 
 
-
-
 if __name__ == '__main__':
     #data = load_data(filename)
     #print(f"data: \n{data}\n")
     #load_galaxys(data)
     test()
     
-
 
 
 
