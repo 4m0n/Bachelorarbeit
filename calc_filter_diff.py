@@ -21,6 +21,72 @@ def read_data_from_jd(filepath):
     df = pd.read_csv(filepath, skiprows=range(start_line))
     return df
 def remove_outliers_mad(file, threshold=3):
+    def neumann_diff(a,b, threshold=3): # format von a: pandas [times, values]
+        # normieren der Lichtkurven -> mean = 0, std = 1
+        mean_a = a["value"].mean()
+        std_a = a["value"].std()
+
+        mean_b = b["value"].mean()
+        std_b = b["value"].std()
+
+        t_min = abs(a["JD"].min() - b["JD"].max()).days
+        t_max = abs(a["JD"].max() - b["JD"].min()).days
+
+        if t_min > 500: # sonst dauert es zu lange
+            t_min = 500
+        if t_max > 500:
+            t_max = 500
+
+        print(f"t_min: {t_min} t_max: {t_max}")
+        a["value"] = (a["value"]-mean_a)/std_a
+        b["value"] = (b["value"]-mean_b)/std_b
+        # Daten einsortieren
+        F = pd.concat([a, b])
+        F = F.sort_values(by='JD').reset_index(drop=True)
+
+        # um tau verschobene Daten
+        T = []
+        r = range(-t_min,t_max)
+        for tau in r:
+            c = b.copy()
+            c["JD"] = c["JD"] + pd.Timedelta(days=tau)
+            F_tau = pd.concat([a, c])
+            F_tau = F_tau.sort_values(by='JD').reset_index(drop=True)
+
+            #T(tau) berechnen
+            T.append(0)
+            for i in range(len(F)-1):
+                T[-1] += (F["value"][i] - F_tau["value"][i+1])**2
+            T[-1] = T[-1] * 1/(len(F)-1)
+        print(f"Kleinste Tau ist: {r[T.index(min(T))]}")
+
+        #plotten
+
+
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6))
+        c = b.copy()
+        c["JD"] = c["JD"] + pd.Timedelta(days=r[T.index(min(T))])
+        # Plot 1: r vs T
+        ax1.plot(r, T)
+        ax1.set_title('Plot 1: r vs T')
+        ax1.set_xlabel('r')
+        ax1.set_ylabel('T')
+
+        # Plot 2: Zeit vs Value für DataFrames a, b und c
+        ax2.plot(a['JD'], a['value'], label='a')
+        ax2.plot(c['JD'], c['value'], label='new')
+        ax2.plot(b['JD'], b['value'], label='original', color='black', alpha=0.5)
+        ax2.set_title('Plot 2: Time vs Value for a, b, and c')
+        ax2.set_xlabel('Time')
+        ax2.set_ylabel('Value')
+        ax2.legend()  # Legende hinzufügen
+
+        # Layout anpassen und anzeigen
+        plt.tight_layout()
+        plt.show()
+
+        return r[T.index(min(T))]
 
     def move(filter,elements):
         stop = False
@@ -29,6 +95,7 @@ def remove_outliers_mad(file, threshold=3):
                 if x==y:
                     stop = True
                     break
+
                 # Extrahiere JD-Werte für beide Filter
                 jd_v = file.loc[(file[filter] == x), 'JD'].copy()
                 jd_g = file.loc[(file[filter] == y), 'JD'].copy()
@@ -38,6 +105,12 @@ def remove_outliers_mad(file, threshold=3):
                 end_overlap = min(jd_v.max(), jd_g.max())
                 if end_overlap < start_overlap:
                     break
+                a = file.loc[(file[filter] == x), ['JD', value]].copy()
+                a.rename(columns={value: 'value'}, inplace=True)
+                b = file.loc[(file[filter] == y), ['JD', value]].copy()
+                b.rename(columns={value: 'value'}, inplace=True)
+                neumann_diff(a,b)
+
                 overlap_indices = file[(file['JD'] >= start_overlap) & (file['JD'] <= end_overlap)].index.copy()
 
                 mean_g = file.loc[(file[filter] == y) & (file.index.isin(overlap_indices)), value].mean()
@@ -47,7 +120,6 @@ def remove_outliers_mad(file, threshold=3):
             if stop:
                 break
         return file 
-
     position = len(file)
     if True:
         for _ in range(1):
@@ -83,7 +155,7 @@ def rolling_mid(file):
     file.set_index('JD', inplace=True)
     file.sort_index(inplace=True)
     # Berechne den gleitenden Mittelwert über 28 Tage
-    file[value] = file[value].rolling(window='100D').mean()
+    file[value] = file[value].rolling(window='28D').mean()
     file.reset_index(inplace=True)
     return file
 
@@ -116,9 +188,9 @@ def visualize1(file):
     # === Plot
         
     plt.plot(x2,y2,zorder=4)   
-    #plt.scatter(x2,y2,marker = "x",zorder=4)  
+    plt.scatter(x2,y2,marker = "x",zorder=4)  
     plt.scatter(x1,y1,c = c,zorder=3)
-    #plt.scatter(x_org,y_org,c = "black", alpha=0.4, zorder=1)
+    plt.scatter(x_org,y_org,c = "black", alpha=0.4, zorder=1)
     plt.scatter(x_org,y_org,c = c2, alpha=0.4, zorder=5, marker = "x")
     plt.show()
 
@@ -143,3 +215,5 @@ start()
 
 # verschiedene Kameras kombinieren wie Filter
 # rolling mean für Zeitintervall um durchschnittswert zu erhalten
+
+# zuerst noise entfernen, dann rolling mean
