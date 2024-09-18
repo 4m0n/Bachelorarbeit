@@ -29,8 +29,10 @@ if not os.path.exists(path+"active_galaxies.csv"):
     with open(path+"active_galaxies.csv", 'w') as datei:
         datei.write("ID,name,acivity,R,times\n")  # Leere Datei erstellen oder optionalen Text hineinschreiben
     print("Datei wurde erstellt.")
-# with open(path+"active_galaxies.csv", 'w') as datei:
-#     datei.write("ID,name,acivity,R,times\n")
+with open(path+"active_galaxies.csv", 'w') as datei:
+    datei.write("ID,name,acivity,R,times\n")
+    
+plot_cuts = pd.DataFrame(columns = ["start","end","cam","color","shift"])
 #=======================================================
 
 
@@ -370,6 +372,20 @@ def neumann_cam_shift(data,curve):
     fit_curve = curve[(curve['JD'] >= start_overlap) & (curve['JD'] <= end_overlap)].copy()
     main_curve.reset_index(drop=True, inplace=True)
     fit_curve.reset_index(drop=True, inplace=True)
+    
+    if len(main_curve["JD"]) < 1: # falls die Kurve genau in eine Lücke ohne Daten fällt
+        len_overlap = len(data[(data['JD'] <= start_overlap)])
+        if len_overlap < 10:
+            len_overlap = len(data[(data['JD'] <= start_overlap)])
+        else :
+            len_overlap = 10
+        mean_not_overlapping_curve = data.loc[(data['JD'] <= start_overlap), value][-len_overlap:].mean()
+        mean_shift_curve = curve[value].mean()
+        shift_mean = mean_not_overlapping_curve - mean_shift_curve
+        curve[value] = curve[value] + shift_mean
+        return curve
+    #NGC4395 als beispiel für eine Lücke
+    
     fit_curve_backup = fit_curve.copy()
     mean_plot_curve = fit_curve.copy() #! löschen
     #R = np.arange(-20,20,0.01) # ! Funktion für die Range schreiben um minimum schneller zu finden
@@ -471,22 +487,68 @@ def shift_cam_and_filters(file):
     for i in range(1,len(cameras)):
         #print(f"cam: {cameras[i]} nr: {i}")
         fit_curve = file[file["Camera"] == cameras[i]].copy()
-        # Check ob es größere Lücken oder Sprünge gibt -> Dann Lichtkurve weiter unterteilen
-        fit_curve.reset_index(drop=True, inplace=True)
-        fit_curve.sort_values(by='JD', inplace=True)
-        """        cut = [0]
-        for i in range(len(fit_curve["JD"])-1):
-            if fit_curve["JD"][i+1] - fit_curve["JD"][i] > pd.Timedelta(days=30): # Maximale Lückengröße
-                cut.append(i)
-                print(f"\n\n\nMehr als 30 Tage HAAAALLOOOOO, l lichtkurve: {len(fit_curve)} und i: {i}\n\n\n")
-        TODO: evlt Probleme: Wie wird der Bereich ausserhalb der Überlappung verschoben? (mittelwert von den Einzelstücken davor?)
-        Im Überlappungsbereich kein Problem            
-        """
         
-        fit_curve = neumann_cam_shift(main_curve,fit_curve)
-        main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
-        main_curve.sort_values(by='JD', inplace=True)
-    
+        # Check ob es größere Lücken oder Sprünge gibt -> Dann Lichtkurve weiter unterteilen # ! Wenn ein Cluster stark verschoben ist -> wird als seperate Kurve behandelt
+        if True:
+            fit_curve.reset_index(drop=True, inplace=True)
+            fit_curve.sort_values(by='JD', inplace=True)
+            curve_splitter = pd.DataFrame(columns = ["cut","mean","std"])
+            global plot_cuts
+            start = 0
+            for i in range(len(fit_curve["JD"])-1):
+                if fit_curve["JD"][i+1] - fit_curve["JD"][i] > pd.Timedelta(days=30): # Maximale Lückengröße
+                    if len(fit_curve[value][start:i]) <2: #! entfernen? (wenn in einem einzelnen Zeitraum weniger als 2 Werte vorhanden sind)
+                        start = i+1
+                        continue
+                    curve_splitter = pd.concat([curve_splitter, pd.DataFrame([{"cut":i,"mean":fit_curve[value][start:i].mean(),"std":fit_curve[value][start:i].std()}])], ignore_index=True)                
+                    start = i+1
+                    
+            # if len(curve_splitter["cut"]) > 0:
+            #     print(f"\ncurve_splitter {i}\n: {curve_splitter}")
+            # cluster löschen
+            mean_std = curve_splitter["std"].mean()
+            new_curves = pd.DataFrame(columns = ["cut_start","cut_end"])
+            unchanged_curve = [pd.DataFrame(columns=fit_curve.columns),pd.DataFrame(columns=fit_curve.columns),pd.DataFrame(columns=fit_curve.columns)]
+            first_change = 0
+            last_i = 0
+            for i in range(1,len(curve_splitter["cut"])):
+                if curve_splitter["std"][i] < mean_std*2 and ((curve_splitter["mean"][i] > curve_splitter["mean"][i-1]*1.1) or (curve_splitter["mean"][i] < curve_splitter["mean"][i-1]*0.9)):
+                    new_curves = pd.concat([new_curves, pd.DataFrame([{"cut_start":curve_splitter["cut"][i-1],"cut_end":curve_splitter["cut"][i]}])], ignore_index=True)
+                    plot_cuts = pd.concat([plot_cuts, pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"end":fit_curve.loc[curve_splitter["cut"][i],"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])], ignore_index=True)
+                    first_change = 1
+                    last_i = i
+                else:
+                    if first_change == 0:
+                        unchanged_curve[0] = fit_curve[0:curve_splitter["cut"][i]].copy()
+                    elif first_change == 1:  
+                        unchanged_curve[1] = pd.concat([unchanged_curve[1], fit_curve[curve_splitter["cut"][i-1]:curve_splitter["cut"][i]]], ignore_index=True)
+            if len(curve_splitter["cut"]) != last_i:
+                #unchanged_curve[2] = fit_curve[curve_splitter["cut"][last_i-1]:curve_splitter["cut"][last_i]].copy()
+                unchanged_curve[2] = fit_curve[start:].copy()
+            #unchanged_curve[2] = pd.concat([unchanged_curve[1], fit_curve[start:]], ignore_index=True)
+            fit_curve_backup = fit_curve.copy()
+            if len(unchanged_curve[0]) > 1:
+                fit_curve = neumann_cam_shift(main_curve,unchanged_curve[0])
+                main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
+                main_curve.sort_values(by='JD', inplace=True)
+            if len(unchanged_curve[1]) > 1:
+                fit_curve = neumann_cam_shift(main_curve,unchanged_curve[1])
+                main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
+                main_curve.sort_values(by='JD', inplace=True)
+            for i in range(len(new_curves["cut_start"])):
+                fit_curve = fit_curve_backup[new_curves["cut_start"][i]:new_curves["cut_end"][i]].copy()
+                fit_curve = neumann_cam_shift(main_curve,fit_curve)
+                main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
+                main_curve.sort_values(by='JD', inplace=True)
+            if len(unchanged_curve[2]) > 1:
+                fit_curve = neumann_cam_shift(main_curve,unchanged_curve[2])
+                main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
+                main_curve.sort_values(by='JD', inplace=True)
+            
+        else:  
+            fit_curve = neumann_cam_shift(main_curve,fit_curve)
+            main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
+            main_curve.sort_values(by='JD', inplace=True)
     return main_curve
     
 # Beispiel: Entfernen von Ausreißern aus einer Spalte 'Flux'
@@ -595,6 +657,14 @@ def visualize1(file):
         #plt.scatter(x_org,y_org,c = c2, alpha=0.4, zorder=5, marker = "x") # plot der Orginalpunkte
         plt.scatter(x_1,y_1,c = c3, alpha=0.2, zorder=5, marker = "x") # plot verschobene orginalpunkte
         plt.scatter(x_2,y_2,c = c4, alpha=0.2, zorder=5, marker = "o") # plot verschobene orginalpunkte
+        for i in range(len(plot_cuts["cam"])):
+            plot_cuts["cam"][i] = farben[np.where(cameras == plot_cuts["cam"][i])[0][0]]
+
+        for x,y,color in zip(plot_cuts["start"],plot_cuts["end"],plot_cuts["cam"]):
+            plt.axvline(x=x, color=color, linestyle='solid',alpha = 0.5)
+            plt.axvline(x=y, color=color, linestyle='dashdot',alpha = 0.5)
+        for x,y,color,shift in zip(plot_cuts["start"],plot_cuts["end"],plot_cuts["cam"],plot_cuts["shift"]):
+            plt.text(x, max(max(y_1),max(y_2)), f"{round(shift*100)/100}",color = color)
         #plt.scatter(x1,y1,c = c3,zorder=5, alpha=0.4, marker = marker)
         plt.grid()
         plt.legend()
@@ -614,10 +684,15 @@ def start():
             continue
         global current_ID
         current_ID = int(f.split("/")[-1].split("-")[0])
+        
+        global plot_cuts        
+        plot_cuts = pd.DataFrame(columns = ["start","end","cam","color","shift"])
+        
         # Nur Galaien mit gewisser Aktivität laden
         if current_ID in galaxy_active["ID"].values:
             if (galaxy_active.loc[galaxy_active["ID"] == current_ID, "acivity"].values[0] <= treshold_F_var) and (galaxy_active.loc[galaxy_active["ID"] == current_ID, "R"].values[0] <= treshold_R):
-                continue
+                #continue
+                pass
         # ========================================
             
         file = read_data_from_jd(f)
