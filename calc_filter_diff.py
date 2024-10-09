@@ -3,6 +3,7 @@ from os import listdir
 import os
 from os.path import isfile, join
 import matplotlib.pyplot as plt
+from matplotlib.widgets import CheckButtons
 import numpy as np
 import math
 import time
@@ -10,10 +11,10 @@ from numba import jit
 from tqdm import tqdm
 # ====== CHANGE =====
 path = "light_curves/"
-#path = "light_curves_specific/"
+path = "compare_curves/"
 value = "Flux"
-mid = 13
-treshold_F_var = 0.5 # ab wann eine Galaxie aktiv ist
+mid = 12
+treshold_F_var = 0.0025 # ab wann eine Galaxie aktiv ist
 treshold_R = 1.2 # ab wann eine Galaxie aktiv ist
 plot_von_neumann_shift = False
 plot_curves_general = True
@@ -29,10 +30,11 @@ if not os.path.exists(path+"active_galaxies.csv"):
     with open(path+"active_galaxies.csv", 'w') as datei:
         datei.write("ID,name,acivity,R,times\n")  # Leere Datei erstellen oder optionalen Text hineinschreiben
     print("Datei wurde erstellt.")
-with open(path+"active_galaxies.csv", 'w') as datei:
-    datei.write("ID,name,acivity,R,times\n")
+# with open(path+"active_galaxies.csv", 'w') as datei:
+#     datei.write("ID,name,acivity,R,times\n")
     
-plot_cuts = pd.DataFrame(columns = ["start","end","cam","color","shift"])
+plot_cuts = pd.DataFrame(columns = ["start","cam","shift"],dtype = "float")
+plot_cuts = plot_cuts.astype({'start': 'datetime64[ns]', "cam": "str"})
 #=======================================================
 
 
@@ -48,6 +50,7 @@ def funcion_time(func): # für eine bessere übersicht beim ausführen der Aufga
 
 
 def read_data_from_jd(filepath):
+    print(filepath)
     with open(filepath, 'r') as file:
         # Suche die Zeile, die mit "JD" beginnt
         for i, line in enumerate(file):
@@ -290,9 +293,11 @@ def remove_outliers_mad(file, threshold=3):
         return file 
     position = len(file)
     if True:
+        cams = file["Camera"].unique().copy()
         for _ in range(1):
-            for c in ["V","g"]:
-                df = file[file.Filter == c].reset_index(drop=True)
+            for c in cams:
+            #for c in ["V","g"]:
+                df = file[file.Camera == c].reset_index(drop=True)
                 df = df.sort_values(by='JD').reset_index(drop=True)
                 
                 #time shift
@@ -308,6 +313,7 @@ def remove_outliers_mad(file, threshold=3):
             
                 if True:    
                     mean = df[value].rolling(window=mid, center=True).median() # median besser als mean?
+                    #print(mean.to_string())
                     mean_mean = mean.mean()
                     std = df[value].rolling(window=mid, center=True).std()
                     std_mean = std.mean()
@@ -315,7 +321,6 @@ def remove_outliers_mad(file, threshold=3):
                     mean = np.where(np.isnan(mean), mean_mean, mean)
                     std = np.where(np.isnan(std), std_mean, std)
 
-                    #print(f"mean: {mean} \n\nstd {std}")
                     for i in reversed(range(0,len(df))):
                         #if df[value][i] > mean[i] + mean[i]*0.02 or df[value][i] < mean[i] - mean[i]*0.02:
                         if df.at[i,value] > ((mean[i] + std[i])*1.01) or df.at[i,value] < ((mean[i] - std[i])*0.99):
@@ -334,7 +339,7 @@ def remove_outliers_mad(file, threshold=3):
     return file
 def get_galaxy_name():
     if current_ID not in filename["ID"].values:
-        return "ID not found"
+        return "ID not found - ID: {}".format(current_ID)
     name = filename.loc[filename["ID"] == current_ID, "name"]
     return name.values[0]
     
@@ -489,61 +494,43 @@ def shift_cam_and_filters(file):
         fit_curve = file[file["Camera"] == cameras[i]].copy()
         
         # Check ob es größere Lücken oder Sprünge gibt -> Dann Lichtkurve weiter unterteilen # ! Wenn ein Cluster stark verschoben ist -> wird als seperate Kurve behandelt
-        if True:
+        if False:
             fit_curve.reset_index(drop=True, inplace=True)
             fit_curve.sort_values(by='JD', inplace=True)
-            curve_splitter = pd.DataFrame(columns = ["cut","mean","std"])
             global plot_cuts
+            curve_splitter = pd.DataFrame(columns=["cut", "mean", "std"], dtype='float')   
+            curve_splitter = curve_splitter.astype({'cut': 'int64'})         
             start = 0
             for i in range(len(fit_curve["JD"])-1):
-                if fit_curve["JD"][i+1] - fit_curve["JD"][i] > pd.Timedelta(days=30): # Maximale Lückengröße
+                if (fit_curve["JD"][i+1] - fit_curve["JD"][i] > pd.Timedelta(days=30)) or (abs(fit_curve[value][i+1] - fit_curve[value][i]) > fit_curve[value].std()): # Maximale Lückengröße
                     if len(fit_curve[value][start:i]) <2: #! entfernen? (wenn in einem einzelnen Zeitraum weniger als 2 Werte vorhanden sind)
                         start = i+1
                         continue
+
                     curve_splitter = pd.concat([curve_splitter, pd.DataFrame([{"cut":i,"mean":fit_curve[value][start:i].mean(),"std":fit_curve[value][start:i].std()}])], ignore_index=True)                
                     start = i+1
-                    
-            # if len(curve_splitter["cut"]) > 0:
-            #     print(f"\ncurve_splitter {i}\n: {curve_splitter}")
-            # cluster löschen
+                                        
             mean_std = curve_splitter["std"].mean()
-            new_curves = pd.DataFrame(columns = ["cut_start","cut_end"])
-            unchanged_curve = [pd.DataFrame(columns=fit_curve.columns),pd.DataFrame(columns=fit_curve.columns),pd.DataFrame(columns=fit_curve.columns)]
-            first_change = 0
-            last_i = 0
+            new_curves = pd.DataFrame(columns = ["cut_start"])
+            
+            start_data = {"cut_start":[0,len(fit_curve[value])]}
+            new_curves = pd.DataFrame(start_data)
+
             for i in range(1,len(curve_splitter["cut"])):
-                if curve_splitter["std"][i] < mean_std*2 and ((curve_splitter["mean"][i] > curve_splitter["mean"][i-1]*1.1) or (curve_splitter["mean"][i] < curve_splitter["mean"][i-1]*0.9)):
-                    new_curves = pd.concat([new_curves, pd.DataFrame([{"cut_start":curve_splitter["cut"][i-1],"cut_end":curve_splitter["cut"][i]}])], ignore_index=True)
-                    plot_cuts = pd.concat([plot_cuts, pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"end":fit_curve.loc[curve_splitter["cut"][i],"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])], ignore_index=True)
-                    first_change = 1
-                    last_i = i
-                else:
-                    if first_change == 0:
-                        unchanged_curve[0] = fit_curve[0:curve_splitter["cut"][i]].copy()
-                    elif first_change == 1:  
-                        unchanged_curve[1] = pd.concat([unchanged_curve[1], fit_curve[curve_splitter["cut"][i-1]:curve_splitter["cut"][i]]], ignore_index=True)
-            if len(curve_splitter["cut"]) != last_i:
-                #unchanged_curve[2] = fit_curve[curve_splitter["cut"][last_i-1]:curve_splitter["cut"][last_i]].copy()
-                unchanged_curve[2] = fit_curve[start:].copy()
-            #unchanged_curve[2] = pd.concat([unchanged_curve[1], fit_curve[start:]], ignore_index=True)
-            fit_curve_backup = fit_curve.copy()
-            if len(unchanged_curve[0]) > 1:
-                fit_curve = neumann_cam_shift(main_curve,unchanged_curve[0])
-                main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
+                if (curve_splitter["std"][i-1] < mean_std*2) and (curve_splitter["std"][i] < mean_std*1.5) and ((curve_splitter["mean"][i] > curve_splitter["mean"][i-1]*1.1) or (curve_splitter["mean"][i] < curve_splitter["mean"][i-1]*0.9)): 
+                    new_curves = pd.concat([new_curves, pd.DataFrame([{"cut_start":curve_splitter["cut"][i-1]}])], ignore_index=True)
+                    if len(plot_cuts["cam"]) == 0:
+                        plot_cuts = pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])
+                    else:
+                        plot_cuts = pd.concat([plot_cuts, pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])], ignore_index=True)
+
+            new_curves.sort_values(by='cut_start', inplace=True)
+            new_curves.reset_index(drop=True, inplace=True)
+            for i in range(1,len(new_curves["cut_start"])):
+                fit_curve2 = neumann_cam_shift(main_curve,fit_curve.iloc[new_curves["cut_start"][i-1]:new_curves["cut_start"][i]].copy())
+                main_curve = pd.concat([main_curve, fit_curve2], ignore_index=True)
                 main_curve.sort_values(by='JD', inplace=True)
-            if len(unchanged_curve[1]) > 1:
-                fit_curve = neumann_cam_shift(main_curve,unchanged_curve[1])
-                main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
-                main_curve.sort_values(by='JD', inplace=True)
-            for i in range(len(new_curves["cut_start"])):
-                fit_curve = fit_curve_backup[new_curves["cut_start"][i]:new_curves["cut_end"][i]].copy()
-                fit_curve = neumann_cam_shift(main_curve,fit_curve)
-                main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
-                main_curve.sort_values(by='JD', inplace=True)
-            if len(unchanged_curve[2]) > 1:
-                fit_curve = neumann_cam_shift(main_curve,unchanged_curve[2])
-                main_curve = pd.concat([main_curve, fit_curve], ignore_index=True)
-                main_curve.sort_values(by='JD', inplace=True)
+
             
         else:  
             fit_curve = neumann_cam_shift(main_curve,fit_curve)
@@ -573,13 +560,18 @@ class find_active:
         sum = 0
         length = len(file[value])
         for i in range (length):
-            sum = file[value + " Error"][i]**2
+            sum = file[value + " Error"][i]**2 #! Auch normieren
         sum = np.sqrt(sum/length)
         return sum # nicht quadriert
     def fractional_variation(file):
         file2 = file.copy() #! Lichtkurve muss normalisiert sein damit Kurven mit hohem Flux nicht höhere Bewertung bekommen?
+        shift = 0
+        if file2[value].min() <= 0:
+            shift = file2[value].min() 
+            file2[value] = file2[value] - shift + 1
+        file2[value] = file2[value]/file2[value].max()
+        file2[f"{value} Error"] = file2[f"{value} Error"]/file2[value].max()
         R = find_active.peak_to_peak_amplitudes(file2)
-        #file2[value] = file2[value]/file2[value].max()
         acivity = (find_active.std(file2)**2-find_active.delta(file2)**2) / find_active.mean(file2)
         find_active.group_galaxies(acivity,R)
     def group_galaxies(acivity,R):
@@ -593,11 +585,15 @@ class find_active:
             datei.write(f"{current_ID},{get_galaxy_name()},{acivity},{R},{acivity*R}\n")
         return
 
-
+def save_final_curves(file):
+    file.to_csv(f"final_light_curves/{get_galaxy_name()}.csv")
+    return
 def visualize1(file):
     x_org, y_org, cam = file["JD"].copy(), file[value].copy(), file["Camera"].copy()
     file = remove_outliers_mad(file)
     file = shift_cam_and_filters(file)
+    save_final_curves(file)
+    #file = remove_outliers_mad(file)
     find_active.fractional_variation(file)
     #file = neumann_remove(file)
     x1,y1 = file["JD"].copy(), file[value].copy()
@@ -622,6 +618,8 @@ def visualize1(file):
     farben = [
     "blue", "black", "cyan", "magenta", "yellow", "black", "white", "orange", 
     "purple", "brown", "pink", "gray", "olive", "darkblue", "lime", "indigo", 
+    "gold", "darkgreen", "teal", "black", "cyan", "magenta", "yellow", "black", "white", "orange", 
+    "purple", "brown", "pink", "gray", "olive", "darkblue", "lime", "indigo", 
     "gold", "darkgreen", "teal"
     ]
     cameras = cam.unique()  
@@ -645,53 +643,130 @@ def visualize1(file):
         galaxy_active = pd.read_csv(path+"/active_galaxies.csv")
         if current_ID in galaxy_active["ID"].values:
             if galaxy_active.loc[galaxy_active["ID"] == current_ID, "acivity"].values[0] <= treshold_F_var and galaxy_active.loc[galaxy_active["ID"] == current_ID, "R"].values[0] <= treshold_R:
-                plt.title(f"NICHT AKTIVE Galaxy: {get_galaxy_name()} TR F: {treshold_F_var} Activity F: {round(galaxy_active.loc[galaxy_active['ID'] == current_ID, 'acivity'].values[0]*10000)/10000}\nTR R: {treshold_R} Activity R: {round(galaxy_active.loc[galaxy_active['ID'] == current_ID, 'R'].values[0]*100)/100}")
+                plt.title(f"NICHT VARIABEL Galaxy: {get_galaxy_name()} TH F: {treshold_F_var} Activity F: {round(galaxy_active.loc[galaxy_active['ID'] == current_ID, 'acivity'].values[0]*10000)/10000}\nTR R: {treshold_R} Activity R: {round(galaxy_active.loc[galaxy_active['ID'] == current_ID, 'R'].values[0]*100)/100}")
             else:
-                plt.title(f"AKTIV \nGalaxy: {get_galaxy_name()} TR F: {treshold_F_var} Activity F: {round(galaxy_active.loc[galaxy_active['ID'] == current_ID, 'acivity'].values[0]*10000)/10000}\nTR R: {treshold_R} Activity R: {round(galaxy_active.loc[galaxy_active['ID'] == current_ID, 'R'].values[0]*100)/100}")
+                if galaxy_active.loc[galaxy_active['ID'] == current_ID, 'R'].values[0] == np.inf:
+                    plt.title(f"VARIABEL Galaxy: {get_galaxy_name()} TH F: {treshold_F_var} Activity F: {round(galaxy_active.loc[galaxy_active['ID'] == current_ID, 'acivity'].values[0]*10000)/10000}\nTR R: {treshold_R} Activity R: inf")
+                else:
+                    plt.title(f"VARIABEL \nGalaxy: {get_galaxy_name()} TH F: {treshold_F_var} Activity F: {round(galaxy_active.loc[galaxy_active['ID'] == current_ID, 'acivity'].values[0]*10000)/10000}\nTR R: {treshold_R} Activity R: {round(galaxy_active.loc[galaxy_active['ID'] == current_ID, 'R'].values[0]*100)/100}")
         #plt.plot(x2,y2,zorder=4, label="10 Tage")
-        plt.plot(x3,y3,zorder=6, label="30 Tage",color = "red")
+        #plt.plot(x3,y3,zorder=6, label="30 Tage",color = "red")
         #plt.plot(x4,y4,zorder=5, label="90 Tage")   
         #plt.scatter(x2,y2,marker = "x",zorder=4)  
         #plt.scatter(x1,y1,c = c,zorder=3, alpha=0.3)
-        #plt.scatter(x_org,y_org,c = "black", alpha=0.4, zorder=1)
-        #plt.scatter(x_org,y_org,c = c2, alpha=0.4, zorder=5, marker = "x") # plot der Orginalpunkte
+        #plt.scatter(x_org,y_org,c = "black", alpha=0.4, zorder=1,marker = "x")
+        #plt.scatter(x_org,y_org,c = c2, alpha=0.4, zorder=5, marker = "o") # plot der Orginalpunkte
         plt.scatter(x_1,y_1,c = c3, alpha=0.2, zorder=5, marker = "x") # plot verschobene orginalpunkte
         plt.scatter(x_2,y_2,c = c4, alpha=0.2, zorder=5, marker = "o") # plot verschobene orginalpunkte
         for i in range(len(plot_cuts["cam"])):
-            plot_cuts["cam"][i] = farben[np.where(cameras == plot_cuts["cam"][i])[0][0]]
-
-        for x,y,color in zip(plot_cuts["start"],plot_cuts["end"],plot_cuts["cam"]):
+            plot_cuts.loc[i, "cam"] = farben[np.where(cameras == plot_cuts["cam"][i])[0][0]]
+        for x,color in zip(plot_cuts["start"],plot_cuts["cam"]):
+            pass
             plt.axvline(x=x, color=color, linestyle='solid',alpha = 0.5)
-            plt.axvline(x=y, color=color, linestyle='dashdot',alpha = 0.5)
-        for x,y,color,shift in zip(plot_cuts["start"],plot_cuts["end"],plot_cuts["cam"],plot_cuts["shift"]):
+        for x,color,shift in zip(plot_cuts["start"],plot_cuts["cam"],plot_cuts["shift"]):
+            if len(y_1) < 2 or len(y_2) < 2:
+                continue
             plt.text(x, max(max(y_1),max(y_2)), f"{round(shift*100)/100}",color = color)
         #plt.scatter(x1,y1,c = c3,zorder=5, alpha=0.4, marker = marker)
         plt.grid()
-        plt.legend()
+        #plt.legend()
         plt.tight_layout()
         plt.show()
         plt.close()
 
 
 
+def visualize_with_checkbuttons(file):
+    x_org, y_org, cam = file["JD"].copy(), file[value].copy(), file["Camera"].copy()
+    file = remove_outliers_mad(file)
+    file = shift_cam_and_filters(file)
+    find_active.fractional_variation(file)
+    file2 = rolling_mid(file, "30D")
+    x3, y3 = file2["JD"].copy(), file2[value].copy()
+    
+    # Filter colors
+    c = []
+    for i in file["Filter"]:
+        if i == "V":
+            c.append("green")
+        else:
+            c.append("red")
 
+    # Camera colors
+    farben = [
+    "blue", "black", "cyan", "magenta", "yellow", "black", "white", "orange", 
+    "purple", "brown", "pink", "gray", "olive", "darkblue", "lime", "indigo", 
+    "gold", "darkgreen", "teal", "black", "cyan", "magenta", "yellow", "black", "white", "orange", 
+    "purple", "brown", "pink", "gray", "olive", "darkblue", "lime", "indigo", 
+    "gold", "darkgreen", "teal"
+    ]
+    cameras = cam.unique()
+    c2 = [farben[np.where(cameras == i)[0][0]] for i in cam]
+    
+    cam2, filter2 = file["Camera"].copy(), file["Filter"].copy()
+    c3, c4 = [], []
+    for index, i in enumerate(cam2):
+        if file["Filter"][index] == "V":
+            c3.append(farben[np.where(cameras == i)[0][0]])
+        else:
+            c4.append(farben[np.where(cameras == i)[0][0]])
+    
+    x_1 = file.loc[file["Filter"] == "V", "JD"].copy()
+    x_2 = file.loc[file["Filter"] == "g", "JD"].copy()
+    y_1 = file.loc[file["Filter"] == "V", value].copy()
+    y_2 = file.loc[file["Filter"] == "g", value].copy()
+    
+    # Create plot
+    fig, ax = plt.subplots()
+    
+    scatter1 = ax.scatter(x_1, y_1, c=c3, alpha=0.2, zorder=5, marker="x", label="V Filter")
+    scatter2 = ax.scatter(x_2, y_2, c=c4, alpha=0.2, zorder=5, marker="o", label="g Filter")
+    
+    plt.grid()
+    plt.tight_layout()
+
+    # Check button logic
+    rax = plt.axes([0.05, 0.4, 0.15, 0.15])  # Position of the CheckButtons widget
+    labels = ['V Filter', 'g Filter']
+    visibility = [scatter1.get_visible(), scatter2.get_visible()]
+    
+    check = CheckButtons(rax, labels, visibility)
+
+    def func(label):
+        if label == 'V Filter':
+            scatter1.set_visible(not scatter1.get_visible())
+        elif label == 'g Filter':
+            scatter2.set_visible(not scatter2.get_visible())
+        plt.draw()
+
+    check.on_clicked(func)
+
+    plt.show()
+def add_filter_to_cams(file):
+    for i in range(len(file)):
+        file.loc[i, "Camera"] = f'{file.loc[i, "Filter"]}-{file.loc[i, "Camera"]}'
+    return file
 def start():
 
     galaxy_active = pd.read_csv(path+"/active_galaxies.csv")
     files = [join(path, f) for f in listdir(path) if isfile(join(path, f))]
     for f in tqdm(files):  
+        if f != "light_curves/661431822098-light-curves.csv" and f != "light_curves/661431908458-light-curves.csv" and f != "light_curves/42949788551-light-curves.csv": # fitler for specific galaxy
+            #continue
+            pass
         if f == "light_curves/name_id.csv" or f == "light_curves/.DS_Store"or f == path+"active_galaxies.csv":
             continue
         global current_ID
         current_ID = int(f.split("/")[-1].split("-")[0])
         
         global plot_cuts        
-        plot_cuts = pd.DataFrame(columns = ["start","end","cam","color","shift"])
-        
+        plot_cuts = pd.DataFrame(columns = ["start","cam","shift"])
+        plot_cuts = plot_cuts.astype({'start': 'datetime64[ns]', "cam": "str"})
+
         # Nur Galaien mit gewisser Aktivität laden
         if current_ID in galaxy_active["ID"].values:
             if (galaxy_active.loc[galaxy_active["ID"] == current_ID, "acivity"].values[0] <= treshold_F_var) and (galaxy_active.loc[galaxy_active["ID"] == current_ID, "R"].values[0] <= treshold_R):
-                #continue
+                continue
                 pass
         # ========================================
             
@@ -702,8 +777,11 @@ def start():
         file = file[(file["Flux Error"] < 1) & (file["Flux Error"] > 0)]
         file = file[(file["Mag Error"] < 1) & (file["Mag Error"] > 0)]
         file.reset_index(drop=True, inplace=True)
+        file = add_filter_to_cams(file.copy()) # so dass filter vernachlässigt werden können 
+        file.reset_index(drop=True, inplace=True)
         #print(f"\nGalaxy ID: {f}, name: {get_galaxy_name()} mit {file["Filter"].unique()} Filtern und {file["Camera"].unique()} Kameras")
         visualize1(file)
+        #visualize_with_checkbuttons(file)
 
 
 start()

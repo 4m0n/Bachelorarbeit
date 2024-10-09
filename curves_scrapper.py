@@ -13,6 +13,7 @@ from selenium.common.exceptions import NoSuchElementException
 import pandas as pd
 import re
 import csv
+from tqdm import tqdm
 
 def start():
     def input(elem, text):
@@ -22,13 +23,17 @@ def start():
 
 
     #df = pd.read_csv('pyasassn_tool/pd_100targets.csv',nrows=5)
-    df = pd.read_csv('pyasassn_tool/pd_1000targets.csv',nrows=100)
+    df = pd.read_csv('pyasassn_tool/pd_1000targets.csv',nrows=1000)
+    df_loaded = pd.DataFrame(columns=df.columns)
     loaded = np.loadtxt("light_curves/name_id.csv",dtype=str, skiprows=1,delimiter=",")
-    for val in loaded: # check if data already exists
+    print(f"loaded: \n{loaded}\n\ndf: \n{df}\n\n")
+    for val in tqdm(reversed(loaded)): # check if data already exists
+        index = 5
         index = df.loc[df["name"]==val[1]].index
         if len(index)>=1:
             df.drop(index = index, inplace=True)
             df.reset_index(drop=True, inplace=True)
+            
 
     # Erstellen eines neuen DataFrame mit nur der Spalte "name" und einer neuen Spalte "ID"
     df = pd.DataFrame({
@@ -48,18 +53,22 @@ def start():
     original_window = driver.current_window_handle
     button = wait.until(EC.visibility_of_element_located((By.XPATH, "//button[@value='simbadSearch']")))
     button.click()
-    for index, row in df.iterrows():
+    for index, row in tqdm(df.iterrows()):
         skip = False
-        name = row['name']
-        print(f"searching for {name}    {index+1}:{len(df)}")
-        # === Select Galaxy ===
-        galaxy = wait.until(EC.presence_of_element_located((By.NAME, "simbadSearchName")))
-        input(galaxy, name)
-        # ===  Search ===
-        search = wait.until(EC.presence_of_element_located((By.NAME, "submit")))
-        search.click()
-        # === Check if exists === 
-        time.sleep(2)
+        try:
+            name = row['name']
+            print(f"searching for {name}    {index+1}:{len(df)}")
+            # === Select Galaxy ===
+            galaxy = wait.until(EC.presence_of_element_located((By.NAME, "simbadSearchName")))
+            input(galaxy, name)
+            # ===  Search ===
+            search = wait.until(EC.presence_of_element_located((By.NAME, "submit")))
+            search.click()
+            # === Check if exists === 
+            time.sleep(2)
+        except:
+            continue
+
         for i in range(100):
             try:
                 print("1")
@@ -85,40 +94,48 @@ def start():
 
         if skip:
             continue
-        # === Choose Dataset ===
-        #button = wait.until(EC.visibility_of_element_located((By.XPATH, "//a[@rel='noopener noreferrer']")))
-        button.click()
+        try:
+            # === Choose Dataset ===
+            #button = wait.until(EC.visibility_of_element_located((By.XPATH, "//a[@rel='noopener noreferrer']")))
+            button.click()
 
-        # === Switch Tabs === 
-        windows = driver.window_handles
+            # === Switch Tabs === 
+            windows = driver.window_handles
 
-        # Zum neuen Fenster wechseln
-        for window in windows:
-            if window != original_window:
-                driver.switch_to.window(window)
-                break
-        # === Save ID ===
-        element = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'h3.page-title')))
-        text = element.text
-        # Die Nummer extrahieren (angenommen, die Nummer ist die erste Zahl im Text)
-        match = re.search(r'ID: (\d+)', text)
-        if match:
-            number = match.group(1)
-            print(f"Gefundene Nummer: {number}\n")
-        else:
-            print("Keine Nummer gefunden")
-            number = 0
-        
-        df.at[index, 'ID'] = number
-        
-        # === Download csv ===
-        button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'button.form-btn')))
-        button.click()
-        driver.close()
-        driver.switch_to.window(original_window)
+            # Zum neuen Fenster wechseln
+            for window in windows:
+                if window != original_window:
+                    driver.switch_to.window(window)
+                    break
+            # === Save ID ===
+            element = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'h3.page-title')))
+            text = element.text
+            # Die Nummer extrahieren (angenommen, die Nummer ist die erste Zahl im Text)
+            match = re.search(r'ID: (\d+)', text)
+            if match:
+                number = match.group(1)
+                print(f"Gefundene Nummer: {number}\n")
+            else:
+                print("Keine Nummer gefunden")
+                number = 0
+            
+            df.at[index, 'ID'] = number
+            
+            # === Download csv ===
+            button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'button.form-btn')))
+            button.click()
+            driver.close()
+            driver.switch_to.window(original_window)
+        except:
+            print("Error: No data found")
+            df.at[index, 'ID'] = 0
+            continue
 
 
-    df.to_csv('light_curves/name_id.csv')
+    if len(loaded) > 1:
+        df.to_csv('light_curves/name_id.csv', mode='a', header=False)
+    else: 
+        df.to_csv('light_curves/name_id.csv') 
 
 
 
