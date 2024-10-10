@@ -251,7 +251,7 @@ for id in names["id"]:
             color = "orange"
             label = "original (V/g shift)"
             zorder = 0
-            continue
+            #continue
         else:
             label = "None"
         file2 = rolling_mid(curve, "30D")

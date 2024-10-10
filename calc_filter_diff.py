@@ -11,24 +11,25 @@ from numba import jit
 from tqdm import tqdm
 # ====== CHANGE =====
 path = "light_curves/"
-path = "compare_curves/"
+#path = "compare_curves/"
 value = "Flux"
 mid = 12
 treshold_F_var = 0.0025 # ab wann eine Galaxie aktiv ist
 treshold_R = 1.2 # ab wann eine Galaxie aktiv ist
 plot_von_neumann_shift = False
-plot_curves_general = True
+plot_curves_general = False
 
 # ====== DO NOT CHANGE =====
 filename_path = "light_curves/name_id.csv"
 filename = pd.read_csv(filename_path, usecols=lambda column: column != 'Unnamed: 0')
 filename.reset_index(drop=True, inplace=True)
 current_ID = 0
+current_cuts = 0
 
 if not os.path.exists(path+"active_galaxies.csv"):
     # Datei erstellen
     with open(path+"active_galaxies.csv", 'w') as datei:
-        datei.write("ID,name,acivity,R,times\n")  # Leere Datei erstellen oder optionalen Text hineinschreiben
+        datei.write("ID,name,acivity,R,times,cuts\n")  # Leere Datei erstellen oder optionalen Text hineinschreiben
     print("Datei wurde erstellt.")
 # with open(path+"active_galaxies.csv", 'w') as datei:
 #     datei.write("ID,name,acivity,R,times\n")
@@ -50,7 +51,6 @@ def funcion_time(func): # für eine bessere übersicht beim ausführen der Aufga
 
 
 def read_data_from_jd(filepath):
-    print(filepath)
     with open(filepath, 'r') as file:
         # Suche die Zeile, die mit "JD" beginnt
         for i, line in enumerate(file):
@@ -312,7 +312,7 @@ def remove_outliers_mad(file, threshold=3):
 
             
                 if True:    
-                    mean = df[value].rolling(window=mid, center=True).median() # median besser als mean?
+                    mean = df[value].rolling(window=mid, center=True).mean() # median besser als mean?
                     #print(mean.to_string())
                     mean_mean = mean.mean()
                     std = df[value].rolling(window=mid, center=True).std()
@@ -494,7 +494,7 @@ def shift_cam_and_filters(file):
         fit_curve = file[file["Camera"] == cameras[i]].copy()
         
         # Check ob es größere Lücken oder Sprünge gibt -> Dann Lichtkurve weiter unterteilen # ! Wenn ein Cluster stark verschoben ist -> wird als seperate Kurve behandelt
-        if False:
+        if True:
             fit_curve.reset_index(drop=True, inplace=True)
             fit_curve.sort_values(by='JD', inplace=True)
             global plot_cuts
@@ -530,7 +530,8 @@ def shift_cam_and_filters(file):
                 fit_curve2 = neumann_cam_shift(main_curve,fit_curve.iloc[new_curves["cut_start"][i-1]:new_curves["cut_start"][i]].copy())
                 main_curve = pd.concat([main_curve, fit_curve2], ignore_index=True)
                 main_curve.sort_values(by='JD', inplace=True)
-
+            global current_cuts
+            current_cuts = len(new_curves["cut_start"]) - 2
             
         else:  
             fit_curve = neumann_cam_shift(main_curve,fit_curve)
@@ -560,7 +561,7 @@ class find_active:
         sum = 0
         length = len(file[value])
         for i in range (length):
-            sum = file[value + " Error"][i]**2 #! Auch normieren
+            sum += file[value + " Error"][i]**2 #! Auch normieren
         sum = np.sqrt(sum/length)
         return sum # nicht quadriert
     def fractional_variation(file):
@@ -582,11 +583,12 @@ class find_active:
         if str(current_ID) in data:
             return
         with open(file_path, 'a') as datei:
-            datei.write(f"{current_ID},{get_galaxy_name()},{acivity},{R},{acivity*R}\n")
+            global current_cuts
+            datei.write(f"{current_ID},{get_galaxy_name()},{acivity},{R},{acivity*R},{current_cuts}\n")
         return
 
 def save_final_curves(file):
-    file.to_csv(f"final_light_curves/{get_galaxy_name()}.csv")
+    file.to_csv(f"final_light_curves/{get_galaxy_name()}.csv",index=False)
     return
 def visualize1(file):
     x_org, y_org, cam = file["JD"].copy(), file[value].copy(), file["Camera"].copy()
@@ -758,7 +760,8 @@ def start():
             continue
         global current_ID
         current_ID = int(f.split("/")[-1].split("-")[0])
-        
+        global current_cuts
+        current_cuts = 0
         global plot_cuts        
         plot_cuts = pd.DataFrame(columns = ["start","cam","shift"])
         plot_cuts = plot_cuts.astype({'start': 'datetime64[ns]', "cam": "str"})
@@ -788,15 +791,6 @@ start()
 
 
 
+# TODO: Lichtkurven importieren mit Koordinaten
 
-# rolling mean für Zeitintervall um durchschnittswert zu erhalten
-
-# zuerst noise entfernen, dann rolling mean
-
-
-
-# Var Statistik (max und min Wert, quzient, fraktionelle Var. Kollatschny 2018 HE1136-2304)
-
-
-
-# TODO Lichtkurve abschneiden sobald eine Lücke zu groß wird -> siehe Galaxie NGC 5643
+#ESO 253 G003

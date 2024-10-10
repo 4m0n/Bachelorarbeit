@@ -26,6 +26,8 @@ def start():
     df = pd.read_csv('pyasassn_tool/pd_1000targets.csv',nrows=1000)
     df_loaded = pd.DataFrame(columns=df.columns)
     loaded = np.loadtxt("light_curves/name_id.csv",dtype=str, skiprows=1,delimiter=",")
+    ra = np.loadtxt("light_curves/name_id.csv",dtype=str, skiprows=2,delimiter=",")
+    dec = np.loadtxt("light_curves/name_id.csv",dtype=str, skiprows=3,delimiter=",")
     print(f"loaded: \n{loaded}\n\ndf: \n{df}\n\n")
     for val in tqdm(reversed(loaded)): # check if data already exists
         index = 5
@@ -33,15 +35,19 @@ def start():
         if len(index)>=1:
             df.drop(index = index, inplace=True)
             df.reset_index(drop=True, inplace=True)
+            ra = np.delete(ra,index)
+            dec = np.delete(dec,index)  
             
 
     # Erstellen eines neuen DataFrame mit nur der Spalte "name" und einer neuen Spalte "ID"
     df = pd.DataFrame({
         'name': df['name'],
-        'ID': None  # Hier kannst du später die ID-Werte hinzufügen
+        'ID': None, 
+        'ra': ra,
+        'dec': dec
     })
 
-
+ 
     driver = webdriver.Firefox()  
     wait = WebDriverWait(driver, 100)
     wait2 = WebDriverWait(driver, 1)
