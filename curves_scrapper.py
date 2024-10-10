@@ -15,6 +15,27 @@ import re
 import csv
 from tqdm import tqdm
 
+
+def calc_degrees(ra,dec):
+    ra_h = float(ra[0:2])
+    ra_min = float(ra[3:5])
+    ra_sec = float(ra[6:])
+    ra = float(15*ra_h + (ra_min/60 *15)+(ra_sec/3600 *15))
+    
+    
+    if dec[0] == "+" or dec[0] == "-":
+        vorzeichen = int(dec[0] +"1")
+        dec = dec[1:]
+    dec_min = float(dec[3:5])
+    dec_sec = float(dec[6:])
+    dec = float(dec[0:2]) + (dec_min/60) + (dec_sec/3600)*vorzeichen
+    print(ra,dec)
+    return ra,dec
+
+
+calc_degrees("00 42 44.3","+41 16 10")
+
+
 def start():
     def input(elem, text):
         elem.clear()
@@ -25,9 +46,8 @@ def start():
     #df = pd.read_csv('pyasassn_tool/pd_100targets.csv',nrows=5)
     df = pd.read_csv('pyasassn_tool/pd_1000targets.csv',nrows=1000)
     df_loaded = pd.DataFrame(columns=df.columns)
-    loaded = np.loadtxt("light_curves/name_id.csv",dtype=str, skiprows=1,delimiter=",")
-    ra = np.loadtxt("light_curves/name_id.csv",dtype=str, skiprows=2,delimiter=",")
-    dec = np.loadtxt("light_curves/name_id.csv",dtype=str, skiprows=3,delimiter=",")
+    loaded = np.loadtxt("light_curves_new1/name_id.csv",dtype=str, skiprows=1,delimiter=",")
+
     print(f"loaded: \n{loaded}\n\ndf: \n{df}\n\n")
     for val in tqdm(reversed(loaded)): # check if data already exists
         index = 5
@@ -35,18 +55,17 @@ def start():
         if len(index)>=1:
             df.drop(index = index, inplace=True)
             df.reset_index(drop=True, inplace=True)
-            ra = np.delete(ra,index)
-            dec = np.delete(dec,index)  
+
             
 
     # Erstellen eines neuen DataFrame mit nur der Spalte "name" und einer neuen Spalte "ID"
     df = pd.DataFrame({
         'name': df['name'],
         'ID': None, 
-        'ra': ra,
-        'dec': dec
+        'ra': df['ra'],
+        'dec': df['dec']
     })
-
+    
  
     driver = webdriver.Firefox()  
     wait = WebDriverWait(driver, 100)
@@ -61,6 +80,8 @@ def start():
     button.click()
     for index, row in tqdm(df.iterrows()):
         skip = False
+        button = wait.until(EC.visibility_of_element_located((By.XPATH, "//button[@value='simbadSearch']")))
+        button.click()
         try:
             name = row['name']
             print(f"searching for {name}    {index+1}:{len(df)}")
@@ -88,7 +109,7 @@ def start():
                 error = wait2.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'p.error-message'))).text
                 if error == "Your search has rendered no results.":
                     skip = True
-                    df.at[index, 'ID'] = 0
+                    
                 else:
                     print(f"Error: {error}")
             except:
@@ -99,10 +120,35 @@ def start():
 
 
         if skip:
-            continue
+            try:
+                ra = row['ra']
+                dec = row['dec']
+                ra,dec = calc_degrees(ra,dec)
+                radius = 7.8
+                print("\n\n Test search coordinates\n\n")
+                button = wait.until(EC.visibility_of_element_located((By.XPATH, "//button[@value='coneSearch']")))
+                button.click()
+                galaxy = wait.until(EC.presence_of_element_located((By.NAME, "rightAscension")))
+                input(galaxy, ra)
+                galaxy = wait.until(EC.presence_of_element_located((By.NAME, "declination")))
+                input(galaxy, dec)
+                galaxy = wait.until(EC.presence_of_element_located((By.NAME, "radius")))
+                input(galaxy, radius)
+                # ===  Search ===
+                search = wait.until(EC.presence_of_element_located((By.NAME, "submit")))
+                search.click()
+                # === Check if exists === 
+                time.sleep(2)
+            except:
+                print("couldnt find coordinates")
+                continue
+        
+        
+        
         try:
             # === Choose Dataset ===
             #button = wait.until(EC.visibility_of_element_located((By.XPATH, "//a[@rel='noopener noreferrer']")))
+            button = wait2.until(EC.visibility_of_element_located((By.XPATH, "//a[@rel='noopener noreferrer']")))
             button.click()
 
             # === Switch Tabs === 
@@ -139,9 +185,9 @@ def start():
 
 
     if len(loaded) > 1:
-        df.to_csv('light_curves/name_id.csv', mode='a', header=False)
+        df.to_csv('light_curves_new1/name_id.csv', mode='a', header=False)
     else: 
-        df.to_csv('light_curves/name_id.csv') 
+        df.to_csv('light_curves_new1/name_id.csv') 
 
 
 
