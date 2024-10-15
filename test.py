@@ -33,13 +33,13 @@ if True:# Korellation F_var und R
     aktive_prozent = 0
     variabel = pd.DataFrame(columns=["name","F","R"])
     for i in range(len(y)):
-        if y[i] > R_treshold or F_treshold < x[i]:
+        if y[i] > R_treshold and F_treshold < x[i]:
             aktive_prozent += 1
+            if len(variabel) == 0:
+                variabel = pd.DataFrame({"name":[name[i]],"F":[x[i]],"R":[y[i]]})
             variabel = pd.concat([variabel,pd.DataFrame({"name":[name[i]],"F":[x[i]],"R":[y[i]]})])
-    aktive_prozent = round(aktive_prozent / len(y) * 10000)/100
-    print(f"Variable Galaxien nach aktuellem Filter:\n{variabel.to_string()}")
-    
-    print(f"min y {min(y)} max y {max(y)}")
+    aktive_prozent = round(aktive_prozent / len(y) * 10_000)/100
+
     plt.hlines(R_treshold,min(x),max(x)) # R
     plt.vlines(F_treshold,min(y),max(y)) # F
     plt.scatter(x,y,c = z,s = 50, edgecolor = "k", alpha = 0.5)

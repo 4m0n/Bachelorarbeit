@@ -44,7 +44,7 @@ def start():
 
 
     #df = pd.read_csv('pyasassn_tool/pd_100targets.csv',nrows=5)
-    df = pd.read_csv('pyasassn_tool/pd_1000targets.csv',nrows=1000)
+    df = pd.read_csv('pyasassn_tool/pd_1000targets copy.csv',nrows=1000)
     df_loaded = pd.DataFrame(columns=df.columns)
     loaded = np.loadtxt("light_curves_new1/name_id.csv",dtype=str, skiprows=1,delimiter=",")
 
@@ -80,8 +80,13 @@ def start():
     button.click()
     for index, row in tqdm(df.iterrows()):
         skip = False
-        button = wait.until(EC.visibility_of_element_located((By.XPATH, "//button[@value='simbadSearch']")))
-        button.click()
+        try:
+            driver.switch_to.window(original_window)
+            button = wait.until(EC.visibility_of_element_located((By.XPATH, "//button[@value='simbadSearch']")))
+            button.click()
+        except:
+            continue
+            
         try:
             name = row['name']
             print(f"searching for {name}    {index+1}:{len(df)}")
@@ -180,7 +185,7 @@ def start():
             driver.switch_to.window(original_window)
         except:
             print("Error: No data found")
-            df.at[index, 'ID'] = 0
+            df.at[index, 'ID'] = -1
             continue
 
 

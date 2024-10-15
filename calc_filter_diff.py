@@ -31,8 +31,8 @@ if not os.path.exists(path+"active_galaxies.csv"):
     with open(path+"active_galaxies.csv", 'w') as datei:
         datei.write("ID,name,acivity,R,times,cuts\n")  # Leere Datei erstellen oder optionalen Text hineinschreiben
     print("Datei wurde erstellt.")
-# with open(path+"active_galaxies.csv", 'w') as datei:
-#     datei.write("ID,name,acivity,R,times\n")
+with open(path+"active_galaxies.csv", 'w') as datei:
+    datei.write("ID,name,acivity,R,times,cuts\n")
     
 plot_cuts = pd.DataFrame(columns = ["start","cam","shift"],dtype = "float")
 plot_cuts = plot_cuts.astype({'start': 'datetime64[ns]', "cam": "str"})
@@ -477,6 +477,8 @@ def neumann_cam_shift(data,curve):
 def shift_cam_and_filters(file):
     cameras = file["Camera"].unique() 
     filters = file["Filter"].unique()
+    if len(cameras) <= 1:
+        return file
     min = []
     for c in cameras:
         min.append(file.loc[file["Camera"] == c, "JD"].min())
@@ -562,7 +564,10 @@ class find_active:
         length = len(file[value])
         for i in range (length):
             sum += file[value + " Error"][i]**2 #! Auch normieren
-        sum = np.sqrt(sum/length)
+        try:
+            sum = np.sqrt(sum/length)
+        except:
+            sum = 0
         return sum # nicht quadriert
     def fractional_variation(file):
         file2 = file.copy() #! Lichtkurve muss normalisiert sein damit Kurven mit hohem Flux nicht höhere Bewertung bekommen?
