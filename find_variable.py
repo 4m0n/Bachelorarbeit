@@ -10,52 +10,77 @@ import time
 from numba import jit
 from tqdm import tqdm
 from scipy import optimize
+import yaml
 
-# ========== Interesting Galaxies ==========
+from rich import print
+from rich.traceback import install
+from rich.console import Console
+install()
+console = Console()
 
-gal1 = ["NGC 1566", "NGC 4593", "NGC 4131"]
-gal2 = ["ESO253-G003"]
-gal3 = ["NGC 4826", "NGC 2258", "ESO 506-G05","NGC 3783","NGC 5899", "NGC 4748", "NGC 3147","PKS 0131-522","NGC 5078","NGC 5291","NGC 3227","NGC 428","NGC 404", "NGC 3962", "ESO 512-G20","UGC 6728","NGC 1068", "MARK 391","NGC 2617","NGC 676",
-        "IC 4296","ESO 362-G18","NGC 4105","ESO 420-G13","NGC 1241", "NGC 5033", "NGC 7552","NGC 4700","NGC 7590", "UGC 3478", "NGC 2639","IC 1459","NGC 3281", "M 31", "NGC 2217","NGC 5005","NGC 7410","ESO 373-G29","NGC 4051","NGC 4736","NGC 4278",
-        "NGC 3516","NGC 3660","NGC 4725","ESO 377-G24","NGC 7213","MARK    6", "Mark 766","NGC 5377","NGC 1566","CTS J13.12","NGC 4594","NGC 4151","NGC 5273","NGC 2681","NGC 6814","NGC 4411B","NGC 4395","IGR J16024-6107","NGC 4593","NGC 4579","NGC 3941",
-        "NGC 1365","NGC 7714","NGC 4235","POX 52", "NGC 1204"]
-gal4 = ["NGC 3783","NGC 3227","ESO 512-G20","NGC 1068","NGC 2617","NGC 676","ESO 362-G18", "UGC 3478","NGC 4736","NGC 3516","MARK    6","Mark 766","NGC 1566","CTS J13.12","NGC 4594","NGC 4151","NGC 5273","IGR J16024-6107","NGC 4593","NGC 1365"]
-periodic = ["NGC 4826", "NGC 5899", "NGC 4748","NGC 3147","NGC5291","NGC 3227","NGC 404","NGC 3962","ESO 512-G20","UGC 6728", "NGC 676","IC 4296","NGC 5033","NGC 7590","UGC 3478","NGC2639","IC 1459","NGC 3281","M 31","NGC 2217","NGC 5005","ESO 373-G29",
-            "NGC 4736","NGC 3516","NGC 3660","NGC 4725","ESO 377-G24","MARK 6", "MARK 766","CTS J13.12","NGC 4594","NGC 4151","NGC 5273","NGC 2681","NGC 6814","IGR J16024-6107",
-            "NGC 4579","NGC 1365","NGC 7714","POX 52"]
-peak = ["PKS 0131-522","NGC 1068","NGC 2617","NGC 1566","NGC 4411B","NGC 3941"]
-others = ["NGC 3783","NGC 428","ESO 362-G18","NGC 4736","NGC 3516","MARK 6", "NGC 4151","IGR J16024-6107","NGC 4593","NGC 1204"] 
 
+with open("find_variable.yml") as f:
+    config = yaml.safe_load(f)
 # ========== thresholds ==========
 
-PlotAktiv = True
-F_threshold = 0.0025
-R_threshold = 1.2
-amplitude_threshold = 0.1
-amp_diff_threshold = 0.2
-T_threshold = [580_000, 5e8]
-F_and_R_threshold = 1
+F_threshold = config["Thresholds"]["F_threshold"]
+R_threshold = config["Thresholds"]["R_threshold"]
+amplitude_threshold = config["Thresholds"]["amplitude_threshold"]
+amp_diff_threshold = config["Thresholds"]["amp_diff_threshold"] 
+T_threshold = config["Thresholds"]["T_threshold"]
+F_and_R_threshold = config["Thresholds"]["F_and_R_threshold"]
 
 # ========== Variables ==========
 
-show_galaxies = gal3 # sonst == []
+show_galaxies = config["Plots"]["TargetGalaxies"] 
 
 # ========== Paths ==========
 
-value = "Flux"
-path = "activity_curves/"
-load_path = "final_light_curves/"
-activity_path = "light_curves/active_galaxies.csv"
+value = config["Value"]
+path = config["Paths"]["path"]
+load_path = config["Paths"]["load_path"]
+activity_path = config["Paths"]["activity_path"]
 
 
 class Conditions:
-    def main(*,R=0,F=0,amp_diff=0,T=0,Dt = 5e8):
-        return Conditions.periodic(amp_diff,T,Dt)
-    def F_var_R(R,F):
-        return R > R_threshold and F_threshold < F
-    def periodic(amp_diff,T,Dt):
-        return amp_diff > amp_diff_threshold and T > T_threshold[0] and T/(60*60*24)*365 < Dt*2
- 
+    def __init__(self,R=0,F=0,amp_diff=0,T=0,Dt = 5e8,std = 0,up = 0,down = 0,mean = 0):
+        self.R = R
+        self.F = F
+        self.amp_diff = amp_diff
+        self.T = T
+        self.Dt = Dt
+        self.std = std
+        self.up = up
+        self.down = down
+        self.mean = mean
+    def main(self,*, R=0,F=0,amp_diff=0,T=0,Dt = 5e8, std = 0, up = 0, down = 0,mean = 0):
+        self.R = R
+        self.F = F
+        self.amp_diff = amp_diff
+        self.T = T
+        self.Dt = Dt
+        self.std = std
+        self.up = up
+        self.down = down
+        self.mean = mean
+        return Conditions.supernova(self)
+    
+    def F_var_R(self):
+        return self.R > R_threshold and F_threshold < self.F
+
+    def periodic(self):
+        return (self.amp_diff > amp_diff_threshold and 
+                self.T > T_threshold[0] and 
+                self.T / (60 * 60 * 24) * 365 < self.Dt * 2)
+
+    def linear(self):
+        return (self.T / (60 * 60 * 24) * 365 > self.Dt * 2 and 
+                self.amp_diff > amp_diff_threshold * 2)
+
+    def supernova(self):
+        return self.up > 2 and self.up > self.down*5 and self.mean < 0.4 and self.std < 0.15
+    
+CONDITION = Conditions().main
 
 class Plots:
     def show_plots():
@@ -64,19 +89,22 @@ class Plots:
         show_galaxies_lower = [item.replace(" ","").lower()for item in show_galaxies]
         for file in tqdm(files):
             name = file[:-4].replace(" ","")
-            if PlotAktiv:
-                if len(show_galaxies) > 0 and False:
-                    if name.lower() not in show_galaxies_lower:
-                        continue
-                elif file[:-4] in galaxy_active["name"].values:
-                    amp_diff = galaxy_active.loc[galaxy_active["name"] == file[:-4], "amp_diff"].values[0]
-                    T = galaxy_active.loc[galaxy_active["name"] == file[:-4], "period"].values[0]
-                    F = galaxy_active.loc[galaxy_active["name"] == file[:-4], "activity"].values[0]
-                    R = galaxy_active.loc[galaxy_active["name"] == file[:-4], "R"].values[0]
-                    Dt = galaxy_active.loc[galaxy_active["name"] == file[:-4], "Dt"].values[0]
-                    if not Conditions.main(R = R,F = F,amp_diff = amp_diff,T = T, Dt = Dt):
-                        continue
-                Plots.plot_curves(file[:-4])
+            if len(show_galaxies) > 0:
+                if name.lower() not in show_galaxies_lower:
+                    continue
+            elif file[:-4] in galaxy_active["name"].values:
+                amp_diff = galaxy_active.loc[galaxy_active["name"] == file[:-4], "amp_diff"].values[0]
+                T = galaxy_active.loc[galaxy_active["name"] == file[:-4], "period"].values[0]
+                F = galaxy_active.loc[galaxy_active["name"] == file[:-4], "activity"].values[0]
+                R = galaxy_active.loc[galaxy_active["name"] == file[:-4], "R"].values[0]
+                Dt = galaxy_active.loc[galaxy_active["name"] == file[:-4], "Dt"].values[0]
+                std = galaxy_active.loc[galaxy_active["name"] == file[:-4], "std"].values[0]
+                up = galaxy_active.loc[galaxy_active["name"] == file[:-4], "up"].values[0]
+                down = galaxy_active.loc[galaxy_active["name"] == file[:-4], "down"].values[0]
+                mean = galaxy_active.loc[galaxy_active["name"] == file[:-4], "mean"].values[0]
+                if not CONDITION(R = R,F = F,amp_diff = amp_diff,T = T, Dt = Dt,std=std,up=up,down=down,mean=mean) and not config["Plots"]["IgnoreConditions"]:
+                    continue
+            Plots.plot_curves(file[:-4])
 
         
         
@@ -92,9 +120,12 @@ class Plots:
         amp_diff = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=6) #amplitude_diff
         T = abs(np.loadtxt(path1, delimiter=',', skiprows=1,usecols=7))
         Dt = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=8) # delta T
-        
-        x = "amp_diff"
-        y = "T"
+        std = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=9) # std
+        up = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=10) # up
+        down = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=11) # down
+        mean = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=12) # mean
+        x = "up"
+        y = "down"
         z, z_title = cuts, "cuts"
         
         def setup(x):
@@ -123,6 +154,22 @@ class Plots:
                     x = R-(F_var*1000)
                     x_title = "F_and_R"
                     threshold_x = F_and_R_threshold
+                case "up":
+                    x = up
+                    x_title = "up"
+                    threshold_x = 0.0
+                case "down":
+                    x = down
+                    x_title = "down"
+                    threshold_x = 0.0
+                case "std":
+                    x = std
+                    x_title = "std"
+                    threshold_x = 0.0
+                case "mean":
+                    x = mean
+                    x_title = "mean"
+                    threshold_x = 0.0
             return x, x_title, threshold_x
         
         x, x_title, threshold_x = setup(x)
@@ -143,7 +190,7 @@ class Plots:
         aktive_prozent = 0
         variabel = pd.DataFrame(columns=["name","F","R"])
         for i in range(len(y)):
-            if Conditions.main(R = R[i],F = F_var[i],amp_diff = amp_diff[i],T = T[i],Dt = Dt[i]):
+            if CONDITION(R = R[i],F = F_var[i],amp_diff = amp_diff[i],T = T[i],Dt = Dt[i],std=std[i],up=up[i],down=down[i],mean=mean[i]):
                 aktive_prozent += 1
                 x_thresh.append(x[i])
                 y_thresh.append(y[i])
@@ -188,13 +235,7 @@ class Plots:
         x1, y1 = file2.index.copy(), file2[value].copy()
         # Kamera farben
         
-        farben = [
-        "blue", "black", "cyan", "magenta", "yellow", "black", "white", "orange", 
-        "purple", "brown", "pink", "gray", "olive", "darkblue", "lime", "indigo", 
-        "gold", "darkgreen", "teal", "black", "cyan", "magenta", "yellow", "black", "white", "orange", 
-        "purple", "brown", "pink", "gray", "olive", "darkblue", "lime", "indigo", 
-        "gold", "darkgreen", "teal"
-        ]
+        farben = config["Colors"]
         cameras = cam.unique()  
         c2 = []
         for i in cam:
@@ -222,6 +263,10 @@ class Plots:
         amp_diff = galaxy_active.loc[galaxy_active["name"] == name, "amp_diff"].values[0]
         T = galaxy_active.loc[galaxy_active["name"] == name, "period"].values[0]
         Dt = galaxy_active.loc[galaxy_active["name"] == name, "Dt"].values[0]
+        std = galaxy_active.loc[galaxy_active["name"] == name, "std"].values[0]
+        up = galaxy_active.loc[galaxy_active["name"] == name, "up"].values[0]
+        down = galaxy_active.loc[galaxy_active["name"] == name, "down"].values[0]
+        mean = galaxy_active.loc[galaxy_active["name"] == name, "mean"].values[0]
         try:tr_F_var = round(F*10000)/10000
         except:tr_F_var = np.inf
         try: tr_R = round(R*100)/100
@@ -229,7 +274,7 @@ class Plots:
         try: tr_amplitude = round(amp_diff*100)/100
         except: tr_amplitude = np.inf
         if name in galaxy_active["name"].values:
-            if not Conditions.main(F=F,R=R,amp_diff=amp_diff,T=T,Dt=Dt):
+            if not CONDITION(F=F,R=R,amp_diff=amp_diff,T=T,Dt=Dt,std=std,up=up,down=down,mean=mean):
                 plt.title(f"NICHT VARIABEL Galaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\nTR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
             else:
                 plt.title(f"VARIABEL \nGalaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\n TR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
@@ -239,10 +284,25 @@ class Plots:
             
         
         plt.plot(x1,y1,zorder=10, label="30 Tage", color = "red")
-        plt.scatter(x_1,y_1,c = c3, alpha=0.2, zorder=5, marker = "x") # plot verschobene orginalpunkte
-        plt.scatter(x_2,y_2,c = c4, alpha=0.2, zorder=5, marker = "o") # plot verschobene orginalpunkte
+        plt.scatter(x_1,y_1,c = c3, alpha=0.4, zorder=5, marker = "x") # plot verschobene orginalpunkte
+        plt.scatter(x_2,y_2,c = c4, alpha=0.4, zorder=5, marker = "o") # plot verschobene orginalpunkte
         x_temp,y_temp,_,_,_ = FindActive.periodic(name)
         plt.plot(x_temp,y_temp, label = "Sinus Fit", color = "green")
+        
+        # ==== Standartabweichung ====
+        
+        plt.hlines(y.mean()+y.std(),min(x),max(x), label = "Mittelwert", color = "black",alpha = 0.5)
+        plt.hlines(y.mean()-y.std(),min(x),max(x), label = "Mittelwert", color = "black",alpha = 0.5)
+
+        rolling_std = y.rolling(window="30D", center = False, min_periods = 8).std()
+        rolling_mid = y.rolling(window="30D", center = False, min_periods = 8).mean()
+        plt.plot(x,rolling_mid+rolling_std, label = "Standartabweichung", color = "black",alpha = 0.5,zorder = 6)
+        plt.plot(x,rolling_mid-rolling_std, label = "Standartabweichung", color = "black",alpha = 0.5,zorder = 6)
+
+        
+        
+        # ============================
+        
         plt.grid()
         plt.legend()
         plt.tight_layout()
@@ -268,16 +328,15 @@ class FileManager:
         file_path = path+"new_active_galaxies.csv"
         cuts = FileManager.load_cuts(name)
         Fvar = FindActive.fractional_variation(name)
-        cuts = FileManager.load_cuts(name)
         R = FindActive.peak_to_peak_amplitudes(name)
         _,_,amplitude,amp_diff,period = FindActive.periodic(name)
         deltaT = BasicCalcs.TimeDifference(name)
-        
+        std,up,down,mean = FindActive.StdPeak(name)
         if os.path.isfile(file_path) == False:
             with open(file_path, 'w') as datei:
-                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,Dt\n")
+                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,Dt,std,up,down,mean\n")
         with open(file_path, 'a') as datei:
-            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{deltaT.days}\n")
+            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{deltaT.days},{std},{up},{down},{mean}\n")
         return
     
     
@@ -332,7 +391,7 @@ class BasicCalcs:
     def rolling_mid(file, rolling_time ="28D"):
         file2 = file.copy() 
         file2.sort_index(inplace=True)
-        file2[value] = file2[value].rolling(window=rolling_time, center = False, min_periods = 4).mean()
+        file2[value] = file2[value].rolling(window=rolling_time, center = True, min_periods = 4).mean()
         return file2
     
     def fit_func_sin(x, a, b, c, d):
@@ -389,6 +448,24 @@ class FindActive:
         
         return x,y, abs(params[0]), (y.max() - y.min()),(1/abs(params[1]*60)) # T in sekunden       
     
+    def StdPeak(name):
+        curve = FileManager.load_data(name)
+        curve = BasicCalcs.normalize_null(curve)
+        mean = curve[value].mean()
+        std = curve[value].std()
+        rolling = curve[value].rolling(window="30D", center = False, min_periods = 8)
+        rolling_std = rolling.std().values
+        rolling_mid = rolling.mean().values
+        
+        up = 0
+        down = 0
+        for i in range(len(rolling_std)):
+            if rolling_mid[i] + rolling_std[i] > mean + std:
+                up += 1
+            elif rolling_mid[i] - rolling_std[i] < mean - std:
+                down += 1
+                
+        return std, up, down, mean
     def jumps(name):
         curve = FileManager.load_data(name)
         file2 = BasicCalcs.normalize(curve)
@@ -409,12 +486,18 @@ def start():
 
     
     with open(path+"new_active_galaxies.csv", 'w') as datei:
-        datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,Dt\n")
+        datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,Dt,std,up,down,mean\n")
         
     files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
     for file in tqdm(files):
         FileManager.group_galaxies(file[:-4])
-#start()
-#Plots.show_plots()
+        
+        
+if config["ReCalculate"]:
+    start()
+if config["Plots"]["ShowAllPlots"]: 
+    Plots.show_plots()
+if config["Plots"]["ShowGroupPlot"]:
+    Plots.standart1()   
 
-Plots.standart1()   
+# TODO: rolling mid verschieben
