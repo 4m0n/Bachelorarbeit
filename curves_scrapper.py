@@ -189,12 +189,15 @@ def start():
             continue
 
 
+        if len(loaded) > 1:
+            df.to_csv('light_curves_new1/name_id.csv', mode='a', header=False)
+        else: 
+            df.to_csv('light_curves_new1/name_id.csv') 
+
     if len(loaded) > 1:
         df.to_csv('light_curves_new1/name_id.csv', mode='a', header=False)
     else: 
         df.to_csv('light_curves_new1/name_id.csv') 
-
-
 
 
     time.sleep(5)

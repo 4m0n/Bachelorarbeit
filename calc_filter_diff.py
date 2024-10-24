@@ -19,6 +19,10 @@ treshold_R = 1.2 # ab wann eine Galaxie aktiv ist
 plot_von_neumann_shift = False
 plot_curves_general = False
 
+
+galaxy_cuts = [661430607288,635656070242,661430304024,661432030252,661431933652,661431844884,377957862504,214749149546,532576412113,128850141936,120260119268,661430499735,283467877327,661430490724,661430417501,446677648638]
+
+
 # ====== DO NOT CHANGE =====
 filename_path = "light_curves/name_id.csv"
 filename = pd.read_csv(filename_path, usecols=lambda column: column != 'Unnamed: 0')
@@ -503,14 +507,25 @@ def shift_cam_and_filters(file):
             curve_splitter = pd.DataFrame(columns=["cut", "mean", "std"], dtype='float')   
             curve_splitter = curve_splitter.astype({'cut': 'int64'})         
             start = 0
+            # ==== Bedingung 1 
             for i in range(len(fit_curve["JD"])-1):
                 if (fit_curve["JD"][i+1] - fit_curve["JD"][i] > pd.Timedelta(days=30)) or (abs(fit_curve[value][i+1] - fit_curve[value][i]) > fit_curve[value].std()): # Maximale Lückengröße
                     if len(fit_curve[value][start:i]) <2: #! entfernen? (wenn in einem einzelnen Zeitraum weniger als 2 Werte vorhanden sind)
                         start = i+1
                         continue
-
                     curve_splitter = pd.concat([curve_splitter, pd.DataFrame([{"cut":i,"mean":fit_curve[value][start:i].mean(),"std":fit_curve[value][start:i].std()}])], ignore_index=True)                
                     start = i+1
+            # ==== Bedingung 2
+            # avg_days = 4
+            # for i in range(avg_days,len(fit_curve["JD"])-avg_days - 1):  
+            #     mean = fit_curve[value][i-avg_days:i].mean()
+            #     if abs(mean - fit_curve[value][i+1:i+1+avg_days].mean()) > (fit_curve[value][i-avg_days:i].std() - fit_curve[value][i+1:i+1+avg_days].std()).mean():
+            #         for k in range(i,len(fit_curve["JD"])):
+                        
+
+
+                
+            # ================
                                         
             mean_std = curve_splitter["std"].mean()
             new_curves = pd.DataFrame(columns = ["cut_start"])
@@ -519,13 +534,16 @@ def shift_cam_and_filters(file):
             new_curves = pd.DataFrame(start_data)
 
             for i in range(1,len(curve_splitter["cut"])):
+                # ==== Bedingung 1 
                 if (curve_splitter["std"][i-1] < mean_std*2) and (curve_splitter["std"][i] < mean_std*1.5) and ((curve_splitter["mean"][i] > curve_splitter["mean"][i-1]*1.1) or (curve_splitter["mean"][i] < curve_splitter["mean"][i-1]*0.9)): 
                     new_curves = pd.concat([new_curves, pd.DataFrame([{"cut_start":curve_splitter["cut"][i-1]}])], ignore_index=True)
                     if len(plot_cuts["cam"]) == 0:
                         plot_cuts = pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])
                     else:
                         plot_cuts = pd.concat([plot_cuts, pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])], ignore_index=True)
-
+                # ==== Bedingung 2
+                
+                # =================
             new_curves.sort_values(by='cut_start', inplace=True)
             new_curves.reset_index(drop=True, inplace=True)
             for i in range(1,len(new_curves["cut_start"])):
@@ -774,8 +792,11 @@ def start():
         # Nur Galaien mit gewisser Aktivität laden
         if current_ID in galaxy_active["ID"].values:
             if (galaxy_active.loc[galaxy_active["ID"] == current_ID, "acivity"].values[0] <= treshold_F_var) and (galaxy_active.loc[galaxy_active["ID"] == current_ID, "R"].values[0] <= treshold_R):
-                continue
+                
                 pass
+            if galaxy_active.loc[galaxy_active["ID"] == current_ID, "ID"].values[0] not in galaxy_cuts:
+                continue
+            print(f"currentID: {current_ID}")
         # ========================================
             
         file = read_data_from_jd(f)

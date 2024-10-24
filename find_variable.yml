@@ -1,11 +1,12 @@
 ---
 ReCalculate: false
+ReCalculateOnlyNew: false
 Value: Flux
 
 ExampleGalaxies: 
   null: &empty []
   gal1: &gal1 ["NGC 1566", "NGC 4593", "NGC 4131"]
-  gal2: &gal2 ["ESO253-G003"]
+  gal2: &gal2 ["ESO253-G003","Mrk110","PG 0043+039"]
   gal3: &gal3 ["NGC 4826", "NGC 2258", "ESO 506-G05","NGC 3783","NGC 5899", "NGC 4748", "NGC 3147","PKS 0131-522","NGC 5078","NGC 5291","NGC 3227","NGC 428","NGC 404", "NGC 3962", "ESO 512-G20","UGC 6728","NGC 1068", "MARK 391","NGC 2617","NGC 676",
         "IC 4296","ESO 362-G18","NGC 4105","ESO 420-G13","NGC 1241", "NGC 5033", "NGC 7552","NGC 4700","NGC 7590", "UGC 3478", "NGC 2639","IC 1459","NGC 3281", "M 31", "NGC 2217","NGC 5005","NGC 7410","ESO 373-G29","NGC 4051","NGC 4736","NGC 4278",
         "NGC 3516","NGC 3660","NGC 4725","ESO 377-G24","NGC 7213","MARK    6", "Mark 766","NGC 5377","NGC 1566","CTS J13.12","NGC 4594","NGC 4151","NGC 5273","NGC 2681","NGC 6814","NGC 4411B","NGC 4395","IGR J16024-6107","NGC 4593","NGC 4579","NGC 3941",
@@ -18,7 +19,7 @@ ExampleGalaxies:
   others: &others ["NGC 3783","NGC 428","ESO 362-G18","NGC 4736","NGC 3516","MARK 6", "NGC 4151","IGR J16024-6107","NGC 4593","NGC 1204"] 
 
 Plots:
-  TargetGalaxies: *others
+  TargetGalaxies: *empty
   ShowAllPlots: true # zeigt jede Galaxie einzeln
   IgnoreConditions: false # zeigt alle Plots und nicht nur die, die die Bedingungen erfüllen
   ShowGroupPlot: true # zeigt alle Galaxien als Punkte in einem Plot
@@ -42,7 +43,7 @@ Colors: [
     "blue", "black", "magenta", "orange", "purple", 
     "brown", "gray", "olive", "darkblue", "lime", 
     "indigo", "gold", "darkgreen", "teal", "red", 
-    "maroon", "navy", "darkred", "darkpurple", "forestgreen", 
+    "maroon", "navy", "darkred", "forestgreen", 
     "slategray", "darkslateblue", "chocolate", "darkorange", 
     "seagreen", "sienna", "darkmagenta", "midnightblue", 
     "firebrick", "cadetblue", "dodgerblue", "peru", 
