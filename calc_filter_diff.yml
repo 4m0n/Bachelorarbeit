@@ -1,0 +1,16 @@
+
+
+Demo: false # speichert und überschreibt nichts
+ReCalculateAll: false
+Cutter: True
+ShowBothCuts: false
+Plots:
+  Plot: false
+  NeumannShift: false
+
+FilePaths:
+  name_id: "light_curves/name_id.csv"
+
+Variables:
+  value: "Flux"
+  mid: 12

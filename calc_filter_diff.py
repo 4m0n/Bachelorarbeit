@@ -9,22 +9,32 @@ import math
 import time
 from numba import jit
 from tqdm import tqdm
+from scipy import optimize
+import yaml
+
+from rich import print
+from rich.traceback import install
+from rich.console import Console
+install()
+console = Console()
+with open("calc_filter_diff.yml") as f:
+    config = yaml.safe_load(f)
 # ====== CHANGE =====
 path = "light_curves/"
 #path = "compare_curves/"
-value = "Flux"
-mid = 12
+value = config["Variables"]["value"]
+mid = config["Variables"]["mid"]
 treshold_F_var = 0.0025 # ab wann eine Galaxie aktiv ist
 treshold_R = 1.2 # ab wann eine Galaxie aktiv ist
-plot_von_neumann_shift = False
-plot_curves_general = False
+plot_von_neumann_shift = config["Plots"]["NeumannShift"]
+plot_curves_general = config["Plots"]["Plot"]
 
 
 galaxy_cuts = [661430607288,635656070242,661430304024,661432030252,661431933652,661431844884,377957862504,214749149546,532576412113,128850141936,120260119268,661430499735,283467877327,661430490724,661430417501,446677648638]
 
 
 # ====== DO NOT CHANGE =====
-filename_path = "light_curves/name_id.csv"
+filename_path = config["FilePaths"]["name_id"]
 filename = pd.read_csv(filename_path, usecols=lambda column: column != 'Unnamed: 0')
 filename.reset_index(drop=True, inplace=True)
 current_ID = 0
@@ -35,8 +45,9 @@ if not os.path.exists(path+"active_galaxies.csv"):
     with open(path+"active_galaxies.csv", 'w') as datei:
         datei.write("ID,name,acivity,R,times,cuts\n")  # Leere Datei erstellen oder optionalen Text hineinschreiben
     print("Datei wurde erstellt.")
-with open(path+"active_galaxies.csv", 'w') as datei:
-    datei.write("ID,name,acivity,R,times,cuts\n")
+if config["ReCalculateAll"]:
+    with open(path+"active_galaxies.csv", 'w') as datei:
+        datei.write("ID,name,acivity,R,times,cuts\n")
     
 plot_cuts = pd.DataFrame(columns = ["start","cam","shift"],dtype = "float")
 plot_cuts = plot_cuts.astype({'start': 'datetime64[ns]', "cam": "str"})
@@ -478,7 +489,7 @@ def neumann_cam_shift(data,curve):
         plt.show()
         plt.close()
     return curve
-def shift_cam_and_filters(file):
+def shift_cam_and_filters(file,cuts = config["Cutter"]):
     cameras = file["Camera"].unique() 
     filters = file["Filter"].unique()
     if len(cameras) <= 1:
@@ -498,9 +509,8 @@ def shift_cam_and_filters(file):
     for i in range(1,len(cameras)):
         #print(f"cam: {cameras[i]} nr: {i}")
         fit_curve = file[file["Camera"] == cameras[i]].copy()
-        
         # Check ob es größere Lücken oder Sprünge gibt -> Dann Lichtkurve weiter unterteilen # ! Wenn ein Cluster stark verschoben ist -> wird als seperate Kurve behandelt
-        if True:
+        if cuts:
             fit_curve.reset_index(drop=True, inplace=True)
             fit_curve.sort_values(by='JD', inplace=True)
             global plot_cuts
@@ -532,18 +542,53 @@ def shift_cam_and_filters(file):
             
             start_data = {"cut_start":[0,len(fit_curve[value])]}
             new_curves = pd.DataFrame(start_data)
+            def steigung(file):
+                def linear(x,m,b):
+                    return m*x+b
+                curve = file.copy()
+                curve[value] = curve[value] - curve[value].min() 
+                curve[value] = curve[value]/curve[value].max()
 
+                numeric_index = []
+                for i in curve["JD"]:
+                    numeric_index.append(i.timestamp())
+                    
+                # ===== FIT ======
+                if len(numeric_index) < 2:
+                    return 0
+                min_num = np.min(numeric_index)
+                diff = np.max(numeric_index) - min_num
+                numeric_index = numeric_index - min_num
+                numeric_index = numeric_index/diff
+                try:
+                    params, params_covariance = optimize.curve_fit(linear, numeric_index, curve[value].values, p0=[1,0.5],maxfev=100000) # m*x+b
+                    m,b  = params[0],params[1]
+                except:
+                    return 0
+                return m
+
+                
+                
             for i in range(1,len(curve_splitter["cut"])):
                 # ==== Bedingung 1 
-                if (curve_splitter["std"][i-1] < mean_std*2) and (curve_splitter["std"][i] < mean_std*1.5) and ((curve_splitter["mean"][i] > curve_splitter["mean"][i-1]*1.1) or (curve_splitter["mean"][i] < curve_splitter["mean"][i-1]*0.9)): 
+                m =  abs(steigung(fit_curve.loc[curve_splitter['cut'][i-1]:curve_splitter['cut'][i]])) < 0.5
+                bedingung = (curve_splitter["std"][i-1] < mean_std*2) and (curve_splitter["std"][i] < mean_std*1.5) and ((curve_splitter["mean"][i] > curve_splitter["mean"][i-1]*1.1) or (curve_splitter["mean"][i] < curve_splitter["mean"][i-1]*0.9))
+                if m and bedingung: 
                     new_curves = pd.concat([new_curves, pd.DataFrame([{"cut_start":curve_splitter["cut"][i-1]}])], ignore_index=True)
+
                     if len(plot_cuts["cam"]) == 0:
                         plot_cuts = pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])
                     else:
                         plot_cuts = pd.concat([plot_cuts, pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])], ignore_index=True)
                 # ==== Bedingung 2
-                
+                #console.print(f"Steigung: {steigung(fit_curve.loc[curve_splitter['cut'][i-1]:curve_splitter['cut'][i]])}")
+                    
                 # =================
+                
+                
+                
+                
+                
             new_curves.sort_values(by='cut_start', inplace=True)
             new_curves.reset_index(drop=True, inplace=True)
             for i in range(1,len(new_curves["cut_start"])):
@@ -588,6 +633,8 @@ class find_active:
             sum = 0
         return sum # nicht quadriert
     def fractional_variation(file):
+        if config["Demo"] == True:
+            return
         file2 = file.copy() #! Lichtkurve muss normalisiert sein damit Kurven mit hohem Flux nicht höhere Bewertung bekommen?
         shift = 0
         if file2[value].min() <= 0:
@@ -611,12 +658,18 @@ class find_active:
         return
 
 def save_final_curves(file):
-    file.to_csv(f"final_light_curves/{get_galaxy_name()}.csv",index=False)
+    if config["Demo"] == True:
+        return
+    name = get_galaxy_name().lstrip().replace(" ","")
+    file.to_csv(f"final_light_curves/{name}.csv",index=False)
     return
 def visualize1(file):
     x_org, y_org, cam = file["JD"].copy(), file[value].copy(), file["Camera"].copy()
     file = remove_outliers_mad(file)
+    if config["ShowBothCuts"] and config["Cutter"] == True:
+        backupfile = shift_cam_and_filters(file.copy(),cuts = False)
     file = shift_cam_and_filters(file)
+        
     save_final_curves(file)
     #file = remove_outliers_mad(file)
     find_active.fractional_variation(file)
@@ -683,6 +736,10 @@ def visualize1(file):
         #plt.scatter(x_org,y_org,c = c2, alpha=0.4, zorder=5, marker = "o") # plot der Orginalpunkte
         plt.scatter(x_1,y_1,c = c3, alpha=0.2, zorder=5, marker = "x") # plot verschobene orginalpunkte
         plt.scatter(x_2,y_2,c = c4, alpha=0.2, zorder=5, marker = "o") # plot verschobene orginalpunkte
+        
+        if config["ShowBothCuts"] and config["Cutter"] == True:
+            plt.scatter(backupfile["JD"],backupfile[value],c = "black", alpha=1, zorder=1,marker = "x")
+        
         for i in range(len(plot_cuts["cam"])):
             plot_cuts.loc[i, "cam"] = farben[np.where(cameras == plot_cuts["cam"][i])[0][0]]
         for x,color in zip(plot_cuts["start"],plot_cuts["cam"]):
@@ -792,11 +849,10 @@ def start():
         # Nur Galaien mit gewisser Aktivität laden
         if current_ID in galaxy_active["ID"].values:
             if (galaxy_active.loc[galaxy_active["ID"] == current_ID, "acivity"].values[0] <= treshold_F_var) and (galaxy_active.loc[galaxy_active["ID"] == current_ID, "R"].values[0] <= treshold_R):
-                
                 pass
             if galaxy_active.loc[galaxy_active["ID"] == current_ID, "ID"].values[0] not in galaxy_cuts:
-                continue
-            print(f"currentID: {current_ID}")
+                pass
+                #continue
         # ========================================
             
         file = read_data_from_jd(f)

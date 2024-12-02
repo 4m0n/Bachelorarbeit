@@ -11,12 +11,16 @@ from numba import jit
 from tqdm import tqdm
 from scipy import optimize
 import yaml
+import scipy.signal as signal
+from astropy.timeseries import LombScargle
+
 
 from rich import print
 from rich.traceback import install
 from rich.console import Console
 install()
 console = Console()
+
 
 
 with open("find_variable.yml") as f:
@@ -41,9 +45,31 @@ path = config["Paths"]["path"]
 load_path = config["Paths"]["load_path"]
 activity_path = config["Paths"]["activity_path"]
 
+# ===========================
+
+groups = pd.DataFrame({
+    "function": ["periodic","linear","supernova","F_var_R","minPoints"],
+    "count": [0,0,0,0,0]
+})
+
+
+
 
 class Conditions:
-    def __init__(self,R=0,F=0,amp_diff=0,T=0,Dt = 5e8,std = 0,up = 0,down = 0,mean = 0,peakA = 0, peakC = 0):
+    def format_return_values(results):
+        print(results)
+        if type(results) == type(True) or len(results) > 2:
+            return results
+        formatted_results = []
+        for boolean, value in results:
+            if isinstance(value, float):  # Überprüfen, ob es eine Zahl ist
+                # Formatieren auf 3 signifikante Stellen mit wissenschaftlicher Notation
+                formatted_value = f"{value:.3e}"  
+            else:
+                formatted_value = value
+            formatted_results.append((boolean, formatted_value))
+        return formatted_results
+    def __init__(self,R=0,F=0,amp_diff=0,T=0,Dt = 5e8,std = 0,up = 0,down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0):
         self.R = R
         self.F = F
         self.amp_diff = amp_diff
@@ -55,7 +81,9 @@ class Conditions:
         self.mean = mean
         self.peakA = peakA
         self.peakC = peakC
-    def main(self,*, R=0,F=0,amp_diff=0,T=0,Dt = 5e8, std = 0, up = 0, down = 0,mean = 0,peakA = 0, peakC = 0):
+        self.lange = lange
+        self.periodicpercent = periodicpercent
+    def main(self,*, R=0,F=0,amp_diff=0,T=0,Dt = 5e8, std = 0, up = 0, down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0, classify = False):
         self.R = R
         self.F = F
         self.amp_diff = amp_diff
@@ -67,19 +95,30 @@ class Conditions:
         self.mean = mean
         self.peakA = peakA
         self.peakC = peakC
-        return Conditions.periodic(self)
+        self.lange = lange
+        self.periodicpercent = periodicpercent
+        if classify == False:
+            return Conditions.periodic(self) #(Conditions.periodic(self) or Conditions.linear(self)) and Conditions.minPoints(self) #and Conditions.minPoints(self)
+        elif classify:
+            return Conditions.periodic(self), Conditions.linear(self), Conditions.supernova(self), Conditions.F_var_R(self), Conditions.minPoints(self)
     
     def F_var_R(self):
-        return self.R > R_threshold and F_threshold < self.F
-
+        bedingung = self.R > R_threshold and F_threshold < self.F
+        bedingung = F_threshold < self.F
+        console.print(f"R: {self.R} F: {self.F} F_var_R: {bedingung}")
+        return bedingung, self.R+self.F
     def periodic(self):
+        console.print(f"AmpDiff: {self.amp_diff}")
         return (self.amp_diff > amp_diff_threshold and 
                 self.T > T_threshold[0] and 
-                self.T / (60 * 60 * 24) * 365 < self.Dt * 2)
+                self.T / (60 * 60 * 24) * 365 < self.Dt * 2), self.periodicpercent *100
+    def periodic2(self):
+        return self.amp_diff > amp_diff_threshold/2 and self.T / (60 * 60 * 24) * 365 < 365*10 and self.T /(60 * 60 * 24) * 365 > 50
 
     def linear(self):
+        console.print(f"AmpDiff: {self.amp_diff}")
         return (self.T / (60 * 60 * 24) * 365 > self.Dt * 2 and 
-                self.amp_diff > amp_diff_threshold * 2)
+                self.amp_diff > amp_diff_threshold * 2), self.amp_diff * 100
 
     def supernova(self):
         peak = False
@@ -94,12 +133,94 @@ class Conditions:
             height = True
         if self.std < 0.12:
             std1 = True
-        #console.print(f"peakA: {self.peakA} peakC: {self.peakC} mean: {self.mean} std: {self.std} peak {peak} width {width} std {std1}")
-        return peak and width and height and std1
-    
+        console.print(f"peakA: {self.peakA}")
+        return peak and width and height and std1, self.peakA * 100
+    def minPoints(self):
+        return self.lange > 250
 CONDITION = Conditions().main
 
 class Plots:
+        
+    def periodic_check_with_significance(name):
+        curve = FileManager.load_data(name)
+        file2 = BasicCalcs.rolling_mid(curve)
+        file2 = BasicCalcs.normalize_null(curve)
+        file2.dropna(inplace=True)
+        numeric_index = BasicCalcs.Datetime_in_Unix(file2.index)
+
+        if len(numeric_index) < 20:
+            return [], [], 0, 0, 0
+
+        # Lomb-Scargle Periodogram
+        time_diff = (numeric_index[-1] - numeric_index[0])
+        frequency = np.linspace(1/(7*24*60*60*365),1/(10*24*60*60), 100000)
+        
+        # LombScargle mit Astropy
+        ls = LombScargle(numeric_index, file2[value].values)
+        power = ls.power(frequency, normalization='standard')
+        fap = ls.false_alarm_probability(power.max())  # FAP für den höchsten Peak
+        
+        # Umrechnung der Frequenzen in Perioden
+        periods = 1 / frequency
+        valid_indices = periods > 0
+        periods = periods[valid_indices]
+        power = power[valid_indices]
+        
+        # Plot
+        fig, (ax_t, ax_p) = plt.subplots(2, 1, constrained_layout=True)
+        ax_t.plot(numeric_index, file2[value].values, 'b+')
+        ax_t.set_xlabel('Time [s]')
+        ax_t.set_ylabel('Amplitude')
+        
+        ax_p.plot(periods, power)
+        #ax_p.set_xscale('log')
+        ax_p.set_xlabel('Period duration [s]')
+        ax_p.set_ylabel('Lomb-Scargle Power')
+        ax_p.grid(True, which="both", linestyle="--", linewidth=0.5)
+        plt.show()
+        plt.close()
+
+        console.print(f"False Alarm Probability (FAP): {fap:.5f}")
+        if fap < 0.01:
+            console.print("There is a significant periodic signal with >99% confidence!")
+        elif fap < 0.05:
+            console.print("There is a periodic signal with >95% confidence.")
+        else:
+            console.print("No significant periodic signal detected.")
+    
+    def periodic_check(name):
+        curve = FileManager.load_data(name)
+        file2 = BasicCalcs.rolling_mid(curve)
+        file2 = BasicCalcs.normalize_null(curve)
+        #file2 = BasicCalcs.rolling_mid(file2)
+        file2.dropna(inplace=True)
+        maximum = curve[value].max()
+        numeric_index = BasicCalcs.Datetime_in_Unix(file2.index)
+        
+        # ===== FIT ======
+        if len(numeric_index) < 20:
+            return [],[],0,0,0
+        time_diff = (numeric_index[-1] - numeric_index[0])
+        w = np.linspace(1/(7*24*60*60), 1/(time_diff/4), 100000)
+        
+        pgram = signal.lombscargle(numeric_index, file2[value].values, w, normalize=True)
+        periods = 2 * np.pi / w
+        
+        #====
+        periods = periods/60/60/24
+        numeric_index = np.array(numeric_index)/60/60/24
+        #====
+        
+        fig, (ax_t, ax_w) = plt.subplots(2, 1, constrained_layout=True)
+        ax_t.plot(numeric_index, file2[value].values, 'b+')
+        ax_t.set_xlabel('Time [s]')
+        ax_w.plot(periods, pgram)
+        ax_w.set_xlabel('Period duration [days]')
+        ax_w.set_ylabel('Normalized amplitude')
+        ax_t.grid(True, which="both", linestyle="--", linewidth=0.5)
+        ax_w.grid(True, which="both", linestyle="--", linewidth=0.5)
+        plt.show()
+
     def show_plots():
         galaxy_active = pd.read_csv(path+"new_active_galaxies.csv")
         files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
@@ -121,7 +242,9 @@ class Plots:
                 mean = galaxy_active.loc[galaxy_active["name"] == file[:-4], "mean"].values[0]
                 peakA = galaxy_active.loc[galaxy_active["name"] == file[:-4], "peakA"].values[0]
                 peakC = galaxy_active.loc[galaxy_active["name"] == file[:-4], "peakC"].values[0]
-                if not CONDITION(R = R,F = F,amp_diff = amp_diff,T = T, Dt = Dt,std=std,up=up,down=down,mean=mean,peakA=peakA,peakC=peakC) and not config["Plots"]["IgnoreConditions"]:
+                lange = galaxy_active.loc[galaxy_active["name"] == file[:-4], "pointCount"].values[0]
+                periodicpercent = galaxy_active.loc[galaxy_active["name"] == file[:-4], "periodicpercent"].values[0]
+                if not CONDITION(R = R,F = F,amp_diff = amp_diff,T = T, Dt = Dt,std=std,up=up,down=down,mean=mean,peakA=peakA,peakC=peakC,lange=lange, periodicpercent = periodicpercent) and not config["Plots"]["IgnoreConditions"]:
                     continue
             Plots.plot_curves(file[:-4])
 
@@ -138,13 +261,15 @@ class Plots:
         amplitude = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=5) #amplitude
         amp_diff = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=6) #amplitude_diff
         T = abs(np.loadtxt(path1, delimiter=',', skiprows=1,usecols=7))
-        Dt = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=8) # delta T
-        std = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=9) # std
-        up = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=10) # up
-        down = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=11) # down
-        mean = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=12) # mean
-        peakA = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=13) # peakA
-        peakC = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=14) # peakC
+        periodicpercent = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=8)
+        Dt = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=9) # delta T
+        std = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=10) # std
+        up = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=11) # up
+        down = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=12) # down
+        mean = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=13) # mean
+        peakA = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=14) # peakA
+        peakC = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=15) # peakC
+        lange = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=16) # pointCount
         x = "peakC"
         y = "peakA"
         z, z_title = cuts, "cuts"
@@ -219,7 +344,7 @@ class Plots:
         aktive_prozent = 0
         variabel = pd.DataFrame(columns=["name","F","R"])
         for i in range(len(y)):
-            if CONDITION(R = R[i],F = F_var[i],amp_diff = amp_diff[i],T = T[i],Dt = Dt[i],std=std[i],up=up[i],down=down[i],mean=mean[i],peakA=peakA[i],peakC=peakC[i]):
+            if CONDITION(R = R[i],F = F_var[i],amp_diff = amp_diff[i],T = T[i],Dt = Dt[i],std=std[i],up=up[i],down=down[i],mean=mean[i],peakA=peakA[i],peakC=peakC[i], lange=lange[i], periodicpercent = periodicpercent[i]):
                 aktive_prozent += 1
                 x_thresh.append(x[i])
                 y_thresh.append(y[i])
@@ -288,7 +413,6 @@ class Plots:
         galaxy_active = pd.read_csv(path + "new_active_galaxies.csv")
         
         cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values[0]
-        
         F = galaxy_active.loc[galaxy_active["name"] == name, "activity"].values[0]
         R = galaxy_active.loc[galaxy_active["name"] == name, "R"].values[0]
         amp_diff = galaxy_active.loc[galaxy_active["name"] == name, "amp_diff"].values[0]
@@ -300,6 +424,8 @@ class Plots:
         mean = galaxy_active.loc[galaxy_active["name"] == name, "mean"].values[0]
         peakA = galaxy_active.loc[galaxy_active["name"] == name, "peakA"].values[0]
         peakC = galaxy_active.loc[galaxy_active["name"] == name, "peakC"].values[0]
+        lange = galaxy_active.loc[galaxy_active["name"] == name, "pointCount"].values[0]
+        periodicpercent = galaxy_active.loc[galaxy_active["name"] == name, "periodicpercent"].values[0]
         try:tr_F_var = round(F*10000)/10000
         except:tr_F_var = np.inf
         try: tr_R = round(R*100)/100
@@ -307,18 +433,19 @@ class Plots:
         try: tr_amplitude = round(amp_diff*100)/100
         except: tr_amplitude = np.inf
         if name in galaxy_active["name"].values:
-            if not CONDITION(F=F,R=R,amp_diff=amp_diff,T=T,Dt=Dt,std=std,up=up,down=down,mean=mean,peakA=peakA,peakC=peakC):
-                plt.title(f"NICHT VARIABEL Galaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\nTR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
+            if not CONDITION(F=F,R=R,amp_diff=amp_diff,T=T,Dt=Dt,std=std,up=up,down=down,mean=mean,peakA=peakA,peakC=peakC,lange=lange,periodicpercent = periodicpercent):
+                #plt.title(f"NICHT VARIABEL Galaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\nTR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
+                plt.title(f"NICHT VARIABEL Galaxy: {name}")
             else:
-                plt.title(f"VARIABEL \nGalaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\n TR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
+                #plt.title(f"VARIABEL \nGalaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\n TR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
+                plt.title(f"VARIABEL \nGalaxy: {name}")
         else:
             plt.title(f"Galaxy: {name} - nicht gefunden")
 
-            
         plt.plot(x1,y1,zorder=10, label="30 Tage", color = "red")
         plt.scatter(x_1,y_1,c = c3, alpha=0.4, zorder=5, marker = "x") # plot verschobene orginalpunkte
         plt.scatter(x_2,y_2,c = c4, alpha=0.4, zorder=5, marker = "o") # plot verschobene orginalpunkte
-        x_temp,y_temp,_,_,_ = FindActive.periodic(name)
+        x_temp,y_temp,_,_,_,_ = FindActive.periodic(name)
         #x_temp,y_temp,_,_ = FindActive.peak(name)
         plt.plot(x_temp,y_temp, label = "Sinus Fit", color = "green",zorder = 9)
         
@@ -336,8 +463,10 @@ class Plots:
         
         # ============================
         
-        plt.grid()
-        plt.legend()
+        plt.grid(color='grey', linestyle='--', linewidth=0.5)
+        plt.xlabel("Zeit", fontsize=12)
+        plt.ylabel("Fluss (normiert auf 1)", fontsize=12)
+        plt.legend(fontsize=10, frameon=True, fancybox=True, framealpha=0.7)
         plt.tight_layout()
         plt.show()
         plt.close()
@@ -383,19 +512,32 @@ class FileManager:
             console.print(f"Delete: {name} (hopefully)")
             return
         R = FindActive.peak_to_peak_amplitudes(name)
-        _,_,amplitude,amp_diff,period = FindActive.periodic(name)
+        _,_,amplitude,amp_diff,period,periodicpercent = FindActive.periodic(name)
         _,_,peakA, peakC = FindActive.peak(name)
         deltaT = BasicCalcs.TimeDifference(name)
-        std,up,down,mean = FindActive.StdPeak(name)
+        std,up,down,mean,lange = FindActive.StdPeak(name)
         if os.path.isfile(file_path) == False:
             with open(file_path, 'w') as datei:
-                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,Dt,std,up,down,mean,peakA,peakC\n")
+                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount\n")
         with open(file_path, 'a') as datei:
-            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{deltaT.days},{std},{up},{down},{mean},{peakA},{peakC}\n")
+            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{periodicpercent},{deltaT.days},{std},{up},{down},{mean},{peakA},{peakC},{lange}\n")
         return
     
     
 class BasicCalcs:
+    def format_return_values(results):
+        print(results)
+        if type(results) == type(True) or len(results) > 2:
+            return results
+        formatted_results = []
+        for boolean, value in results:
+            if isinstance(value, float):  # Überprüfen, ob es eine Zahl ist
+                # Formatieren auf 3 signifikante Stellen mit wissenschaftlicher Notation
+                formatted_value = f"{value:.3e}"  
+            else:
+                formatted_value = value
+            formatted_results.append((boolean, formatted_value))
+        return formatted_results
     def normalize(file):
         curve = file.copy()
         shift = 0
@@ -471,6 +613,70 @@ class BasicCalcs:
         return datetime
 
 class FindActive:
+    def load_parameters(name):
+        galaxy_active = pd.read_csv(path + "new_active_galaxies.csv")
+        cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values[0]
+        F = galaxy_active.loc[galaxy_active["name"] == name, "activity"].values[0]
+        R = galaxy_active.loc[galaxy_active["name"] == name, "R"].values[0]
+        amp_diff = galaxy_active.loc[galaxy_active["name"] == name, "amp_diff"].values[0]
+        T = galaxy_active.loc[galaxy_active["name"] == name, "period"].values[0]
+        Dt = galaxy_active.loc[galaxy_active["name"] == name, "Dt"].values[0]
+        std = galaxy_active.loc[galaxy_active["name"] == name, "std"].values[0]
+        up = galaxy_active.loc[galaxy_active["name"] == name, "up"].values[0]
+        down = galaxy_active.loc[galaxy_active["name"] == name, "down"].values[0]
+        mean = galaxy_active.loc[galaxy_active["name"] == name, "mean"].values[0]
+        peakA = galaxy_active.loc[galaxy_active["name"] == name, "peakA"].values[0]
+        peakC = galaxy_active.loc[galaxy_active["name"] == name, "peakC"].values[0]
+        lange = galaxy_active.loc[galaxy_active["name"] == name, "pointCount"].values[0]  
+        periodicpercent = galaxy_active.loc[galaxy_active["name"] == name, "periodicpercent"].values[0] 
+        return {
+            "R": R, "F": F, "amp_diff": amp_diff, "T": T, "Dt": Dt,
+            "std": std, "up": up, "down": down, "mean": mean,
+            "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent
+        }
+    def FourierLombScargle(name,plot = False):
+        curve = FileManager.load_data(name)
+        #file2 = BasicCalcs.rolling_mid(curve)
+        file2 = BasicCalcs.normalize_null(curve)
+        file2.dropna(inplace=True)
+        file2[value] = file2[value] - 0.5
+        numeric_index = BasicCalcs.Datetime_in_Unix(file2.index)
+
+        if len(numeric_index) < 20:
+            return [], [], 0, 0, 0
+
+        # Lomb-Scargle Periodogram
+
+        frequency, power = LombScargle(numeric_index, file2[value]).autopower(maximum_frequency = 1e-6, samples_per_peak = 20)
+        peaks, properties = signal.find_peaks(power, height=0.003)
+        sorted_indices = np.argsort(properties['peak_heights'])[::-1]
+        sorted_peaks = peaks[sorted_indices]
+        sorted_properties = properties['peak_heights'][sorted_indices]
+
+        peaks = sorted_peaks[0:3]
+        if plot: 
+            if max(power) >= 0.003:
+                pass
+                #power = power / max(power)
+            #console.print(f"PEAKS: {frequency[peaks]*(2*np.pi)}")
+        
+            x,y,Tsin = FindActive.periodic(name,plot = True)
+            console.print(f"Periods: {1/(0.2*np.pi*frequency[peaks])}, total - {max(x)-min(x)}")
+            
+            fig, (ax_t, ax_w) = plt.subplots(2, 1, constrained_layout=True)
+            plt.title(f"Galaxy: {name}")
+            ax_t.plot(numeric_index, file2[value].values, 'b+')
+            ax_t.plot(x,y-0.5, label = "Sinus Fit", color = "green")
+            ax_t.set_xlabel(f'Time [s] - Fit: {Tsin} "Fourier: {2*np.pi*frequency[peaks]}')
+            ax_w.plot((frequency), power)
+            ax_w.vlines(Tsin,min(power),max(power),color = "red")
+            ax_w.set_xlabel('Period duration [days]')
+            ax_w.set_ylabel('Normalized amplitude')
+            ax_t.grid(True, which="both", linestyle="--", linewidth=0.5)
+            ax_w.grid(True, which="both", linestyle="--", linewidth=0.5)
+            plt.get_current_fig_manager().full_screen_toggle()
+            plt.show()
+        return 2*np.pi*frequency[peaks], power[peaks]
     def peak_to_peak_amplitudes(name): # returns R
         curve = FileManager.load_data(name)
         file2 = BasicCalcs.normalize(curve)
@@ -516,7 +722,7 @@ class FindActive:
         return x,y,params[0],params[2] 
         
     
-    def periodic(name):
+    def periodic(name, plot = False):
         curve = FileManager.load_data(name)
         file2 = BasicCalcs.rolling_mid(curve)
         file2 = BasicCalcs.normalize_null(curve)
@@ -527,20 +733,37 @@ class FindActive:
         
         # ===== FIT ======
         if len(numeric_index) < 20:
-            return [],[],0,0,0
-        time_diff = (numeric_index[-1] - numeric_index[0]) 
-        
+            return [],[],0,0,0,0
+        time_diff = (numeric_index[-1] - numeric_index[0])         
         amp = curve[value].max() - curve[value].min()
+
         try:
             params, params_covariance = optimize.curve_fit(BasicCalcs.fit_func_sin, numeric_index, file2[value].values, p0=[amp, 1/time_diff, 0, file2[value].mean()],maxfev=100000) # a * np.sin(b * x + c) + d 
-            a,e,i,b,f,j  = params[0],params[4],params[8],params[1],params[5],params[9]
-            console.print(f"Params: {a,e,i,b,f,j}")
         except:
-            return [],[],0,0,0
+            return [],[],0,0,0,0
         x = np.linspace(min(numeric_index), max(numeric_index), 10000)
         y = BasicCalcs.fit_func_sin(x, *params)
+        
+        Tsin = abs(params[1])
+        if plot:
+            return x,y,Tsin
+        
         x = BasicCalcs.Unix_in_Datetime(x)
-        return x,y, abs(params[0]), (y.max() - y.min()),(1/abs(params[1]*60)) # T in sekunden       
+        T,peaks = FindActive.FourierLombScargle(name)
+        #console.print(f"Tsin: {Tsin}, T: {T}, Peaks: {peaks}")
+        for i in range(len(T)):
+            if T[i]/Tsin < 1.2 and T[i]/Tsin > 0.8:
+                #console.print(f"Period T: {T[i]} Tsin: {Tsin} T/Tsin: {T[i]/Tsin}")
+                return x,y, abs(params[0]), (y.max() - y.min()),(1/abs(params[1]*60)),peaks[i]
+            else:
+                pass
+                #console.print(f"Passt nicht {i} Period T: {T[i]} Tsin: {Tsin} T/Tsin: {T[i]/Tsin}")
+
+
+
+        
+        
+        return x,y, abs(params[0]), (y.max() - y.min()),(1/abs(params[1]*60)),0 # T in sekunden       
     
     def periodic3(name):
         # =====
@@ -582,7 +805,9 @@ class FindActive:
     
     def StdPeak(name):
         curve = FileManager.load_data(name)
+        lange = len(curve)
         curve = BasicCalcs.normalize_null(curve)
+        
         mean = curve[value].mean()
         std = curve[value].std()
         rolling = curve[value].rolling(window="30D", center = False, min_periods = 8)
@@ -597,7 +822,7 @@ class FindActive:
             elif rolling_mid[i] - rolling_std[i] < mean - std:
                 down += 1
                 
-        return std, up, down, mean
+        return std, up, down, mean, lange
     def jumps(name):
         curve = FileManager.load_data(name)
         file2 = BasicCalcs.normalize(curve)
@@ -618,7 +843,7 @@ def start():
 
     if not config["ReCalculateOnlyNew"] or not os.path.exists(path+"new_active_galaxies.csv"):
         with open(path+"new_active_galaxies.csv", 'w') as datei:
-            datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,Dt,std,up,down,mean,peakA,peakC\n")
+            datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount\n")
 
                      
     files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
@@ -627,11 +852,61 @@ def start():
             FileManager.group_galaxies(file[:-4])
         else: continue
         
-        
+
 if config["ReCalculate"]:
     start()
 if config["Plots"]["ShowAllPlots"]: 
     Plots.show_plots()
 if config["Plots"]["ShowGroupPlot"]:
     Plots.standart1()   
+if config["Plots"]["ShowFourierPlot"]:
+    console.print(groups)
+    if show_galaxies != []:
+        for name in show_galaxies:
+            params = FindActive.load_parameters(name)
+            if CONDITION(**params,classify=True) or config["Plots"]["IgnoreConditions"]:
+                FindActive.FourierLombScargle(name, plot = True)
+    else:
+        liste = listdir("final_light_curves")
+        for i in liste:
+            params = FindActive.load_parameters(i[:-4])
+            if CONDITION(**params,classify=True) or config["Plots"]["IgnoreConditions"]:
+                FindActive.FourierLombScargle(i[:-4],plot = True)
+if config["Plots"]["ShowClassifyPlot"]:
+    liste = listdir("final_light_curves")
+    galaxy_active = pd.read_csv(path + "new_active_galaxies.csv")
+    groups = pd.DataFrame()
+    for file in liste:
+        name = file[:-4]
+        if name not in show_galaxies and show_galaxies != []:
+            continue
+        cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values[0]
+        F = galaxy_active.loc[galaxy_active["name"] == name, "activity"].values[0]
+        R = galaxy_active.loc[galaxy_active["name"] == name, "R"].values[0]
+        amp_diff = galaxy_active.loc[galaxy_active["name"] == name, "amp_diff"].values[0]
+        T = galaxy_active.loc[galaxy_active["name"] == name, "period"].values[0]
+        Dt = galaxy_active.loc[galaxy_active["name"] == name, "Dt"].values[0]
+        std = galaxy_active.loc[galaxy_active["name"] == name, "std"].values[0]
+        up = galaxy_active.loc[galaxy_active["name"] == name, "up"].values[0]
+        down = galaxy_active.loc[galaxy_active["name"] == name, "down"].values[0]
+        mean = galaxy_active.loc[galaxy_active["name"] == name, "mean"].values[0]
+        peakA = galaxy_active.loc[galaxy_active["name"] == name, "peakA"].values[0]
+        peakC = galaxy_active.loc[galaxy_active["name"] == name, "peakC"].values[0]
+        lange = galaxy_active.loc[galaxy_active["name"] == name, "pointCount"].values[0]  
+        periodicpercent = galaxy_active.loc[galaxy_active["name"] == name, "periodicpercent"].values[0]      
+                        
+        add = pd.DataFrame([list(CONDITION(R = R,F = F,amp_diff = amp_diff,T = T, Dt = Dt,std=std,up=up,down=down,mean=mean,peakA=peakA,peakC=peakC,lange=lange,periodicpercent=periodicpercent,classify=True))],index = [name],columns=["periodic","linear","supernova","F_var_R","minPoint"])
 
+        groups = pd.concat([groups, add])    
+            
+            
+    console.print(groups.to_string())
+            
+            
+            
+"""
+
+    TODO: beim speichern der finalen kurve leerzeichen entfernen
+    
+    
+"""

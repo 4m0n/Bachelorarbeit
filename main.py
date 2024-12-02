@@ -1,14 +1,26 @@
-import curves_scrapper
-import calc_filter_diff
-from pyasassn_tool import python_tool
+import pandas as pd
+from astropy.time import Time
 
-# downloads files and saves informations in name_id.csv
-#curves_scrapper.start()
+from rich import print
+from rich.traceback import install
+from rich.console import Console
+install()
+console = Console()
+name = "PG 0043+039"
+path = f"final_light_curves/{name}.csv"
 
-#Pyhton tool -> not working
-if __name__ == '__main__':
-    #python_tool.test()
-    pass
+def read_data_from_jd(filepath):
+    df = pd.read_csv(filepath, usecols=["JD", "Flux"])
+    return df
 
-# fit Lightcurves from different filters
-calc_filter_diff.start()
+file = read_data_from_jd(path) 
+
+file['JD'] = pd.to_datetime(file['JD'])
+file["Date"] = file["JD"]
+file['JD'] = file['JD'].apply(lambda x: Time(x).jd)
+
+console.print(file)
+
+# speichere die datei in eine csv datei
+
+file.to_csv(f"light_curves_new1/{name}.csv", index=False)
