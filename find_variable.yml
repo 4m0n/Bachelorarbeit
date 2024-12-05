@@ -5,7 +5,7 @@ Value: Flux
 
 ExampleGalaxies: 
   null: &empty []
-  gal0: &gal0 ["SDSSJ17303+5936"]
+  gal0: &gal0 ["Mrk110","MARK6"]
   gal1: &gal1 ["NGC1566","NGC4593","NGC4131"]
   gal2: &gal2 ["ESO253-G003","Mrk110","PG0043+039","IRAS23226-3843"]
   gal3: &gal3 ["NGC4826","NGC2258","ESO506-G04","NGC3783","NGC5899","NGC4748","NGC3147","PKS0131-522","NGC5078","NGC5291","NGC3227","NGC428","NGC404","NGC3962","ESO512-G20","UGC6728","NGC1068","MARK391","NGC2617","NGC676",
@@ -21,12 +21,13 @@ ExampleGalaxies:
 
 Plots:
   TargetGalaxies: *empty
-  ShowAllPlots: false # zeigt jede Galaxie einzeln
+  ShowAllPlots: true # zeigt jede Galaxie einzeln
   IgnoreConditions: false # zeigt alle Plots und nicht nur die, die die Bedingungen erfüllen
   ShowGroupPlot: false # zeigt alle Galaxien als Punkte in einem Plot
-  ShowFourierPlot: true
+  ShowFourierPlot: false
   ShowClassifyPlot: false
   sortedPlot: false
+  changeActivity: false
 Thresholds:
   F_threshold: 0.01
   R_threshold: 1.2
