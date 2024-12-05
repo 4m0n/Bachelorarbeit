@@ -98,17 +98,16 @@ class Conditions:
         self.lange = lange
         self.periodicpercent = periodicpercent
         if classify == False:
-            return Conditions.periodic(self) #(Conditions.periodic(self) or Conditions.linear(self)) and Conditions.minPoints(self) #and Conditions.minPoints(self)
+            return Conditions.F_var_R(self)[0] and Conditions.minPoints(self) #(Conditions.periodic(self) or Conditions.linear(self)) and Conditions.minPoints(self) #and Conditions.minPoints(self)
         elif classify:
             return Conditions.periodic(self), Conditions.linear(self), Conditions.supernova(self), Conditions.F_var_R(self), Conditions.minPoints(self)
     
     def F_var_R(self):
         bedingung = self.R > R_threshold and F_threshold < self.F
-        bedingung = F_threshold < self.F
-        console.print(f"R: {self.R} F: {self.F} F_var_R: {bedingung}")
+        #bedingung = F_threshold < self.F
+        #console.print(f"R: {self.R} - {self.R > R_threshold} and F: {self.F} - {self.F > F_threshold} ---> {bedingung}")
         return bedingung, self.R+self.F
     def periodic(self):
-        console.print(f"AmpDiff: {self.amp_diff}")
         return (self.amp_diff > amp_diff_threshold and 
                 self.T > T_threshold[0] and 
                 self.T / (60 * 60 * 24) * 365 < self.Dt * 2), self.periodicpercent *100
@@ -116,9 +115,8 @@ class Conditions:
         return self.amp_diff > amp_diff_threshold/2 and self.T / (60 * 60 * 24) * 365 < 365*10 and self.T /(60 * 60 * 24) * 365 > 50
 
     def linear(self):
-        console.print(f"AmpDiff: {self.amp_diff}")
         return (self.T / (60 * 60 * 24) * 365 > self.Dt * 2 and 
-                self.amp_diff > amp_diff_threshold * 2), self.amp_diff * 100
+                self.amp_diff > amp_diff_threshold * 2)
 
     def supernova(self):
         peak = False
@@ -133,8 +131,7 @@ class Conditions:
             height = True
         if self.std < 0.12:
             std1 = True
-        console.print(f"peakA: {self.peakA}")
-        return peak and width and height and std1, self.peakA * 100
+        return peak and width and height and std1
     def minPoints(self):
         return self.lange > 250
 CONDITION = Conditions().main
@@ -221,9 +218,16 @@ class Plots:
         ax_w.grid(True, which="both", linestyle="--", linewidth=0.5)
         plt.show()
 
-    def show_plots():
+    def show_plots(sortname = pd.DataFrame()):
         galaxy_active = pd.read_csv(path+"new_active_galaxies.csv")
-        files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
+        if len(sortname) > 0:
+            files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
+            name_order = {name: i for i, name in enumerate(sortname+".csv")}
+            sorted_names = sorted(files, key=lambda x: name_order.get(x, float('inf')))  # Standardwert für fehlende Namen
+            files = sorted_names
+
+        
+        
         show_galaxies_lower = [item.replace(" ","").lower()for item in show_galaxies]
         for file in tqdm(files):
             name = file[:-4].replace(" ","")
@@ -270,8 +274,8 @@ class Plots:
         peakA = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=14) # peakA
         peakC = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=15) # peakC
         lange = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=16) # pointCount
-        x = "peakC"
-        y = "peakA"
+        x = "F_var"
+        y = "R"
         z, z_title = cuts, "cuts"
         
         def setup(x):
@@ -655,22 +659,29 @@ class FindActive:
 
         peaks = sorted_peaks[0:3]
         if plot: 
+            if True:
+                teilen = (60*60*24*365)
+            else:
+                teilen = 1
             if max(power) >= 0.003:
                 pass
                 #power = power / max(power)
             #console.print(f"PEAKS: {frequency[peaks]*(2*np.pi)}")
         
             x,y,Tsin = FindActive.periodic(name,plot = True)
-            console.print(f"Periods: {1/(0.2*np.pi*frequency[peaks])}, total - {max(x)-min(x)}")
-            
+            console.print(f"Periods: {1/(frequency[peaks])}, total - {max(x)-min(x)}")
+            x = np.array(x)/teilen
+            x = x-min(x)
+            numeric_index = np.array(numeric_index)/teilen
+            numeric_index = numeric_index-min(numeric_index)
             fig, (ax_t, ax_w) = plt.subplots(2, 1, constrained_layout=True)
             plt.title(f"Galaxy: {name}")
             ax_t.plot(numeric_index, file2[value].values, 'b+')
             ax_t.plot(x,y-0.5, label = "Sinus Fit", color = "green")
-            ax_t.set_xlabel(f'Time [s] - Fit: {Tsin} "Fourier: {2*np.pi*frequency[peaks]}')
-            ax_w.plot((frequency), power)
-            ax_w.vlines(Tsin,min(power),max(power),color = "red")
-            ax_w.set_xlabel('Period duration [days]')
+            ax_t.set_xlabel(f'Zeit in [Jahren]\nTime [1/y] - Fit: {Tsin/(2*np.pi)*teilen} "Fourier: {frequency[peaks]*teilen} -> Fit T = {1/(Tsin/(2*np.pi)*teilen)}')
+            ax_w.plot((frequency*teilen), power)
+            ax_w.vlines(Tsin/(2*np.pi)*teilen,min(power),max(power),color = "red")
+            ax_w.set_xlabel('Period duration [1/Jahre]')
             ax_w.set_ylabel('Normalized amplitude')
             ax_t.grid(True, which="both", linestyle="--", linewidth=0.5)
             ax_w.grid(True, which="both", linestyle="--", linewidth=0.5)
@@ -679,7 +690,8 @@ class FindActive:
         return 2*np.pi*frequency[peaks], power[peaks]
     def peak_to_peak_amplitudes(name): # returns R
         curve = FileManager.load_data(name)
-        file2 = BasicCalcs.normalize(curve)
+        #file2 = BasicCalcs.normalize(curve)
+        file2 = curve.copy()
         #print(f"Max: {file2[value].max()} Min: {file2[value].min()}, Zsm: {file2[value].max() / file2[value].min()}")
         if file2[value].max() / file2[value].min() <= 0:
             print(f"\nALARM {file2[value].max() / file2[value].min()}\n")
@@ -872,7 +884,7 @@ if config["Plots"]["ShowFourierPlot"]:
             params = FindActive.load_parameters(i[:-4])
             if CONDITION(**params,classify=True) or config["Plots"]["IgnoreConditions"]:
                 FindActive.FourierLombScargle(i[:-4],plot = True)
-if config["Plots"]["ShowClassifyPlot"]:
+if config["Plots"]["ShowClassifyPlot"] or config["Plots"]["sortedPlot"]:
     liste = listdir("final_light_curves")
     galaxy_active = pd.read_csv(path + "new_active_galaxies.csv")
     groups = pd.DataFrame()
@@ -898,10 +910,18 @@ if config["Plots"]["ShowClassifyPlot"]:
         add = pd.DataFrame([list(CONDITION(R = R,F = F,amp_diff = amp_diff,T = T, Dt = Dt,std=std,up=up,down=down,mean=mean,peakA=peakA,peakC=peakC,lange=lange,periodicpercent=periodicpercent,classify=True))],index = [name],columns=["periodic","linear","supernova","F_var_R","minPoint"])
 
         groups = pd.concat([groups, add])    
-            
-            
-    console.print(groups.to_string())
-            
+    
+    print(groups)  
+    def count_true(row):
+        return sum(1 for value in row if (value is True) or (isinstance(value, tuple) and value[0] == True))
+
+    groups["True_Count"] = groups.apply(count_true, axis=1)
+    df_sorted = groups.sort_values(by="True_Count", ascending=False)
+    df_sorted = df_sorted[df_sorted["minPoint"] == True]
+    #df_sorted = df_sorted.drop(columns=["True_Count"])
+        
+    console.print(df_sorted.to_string())
+    Plots.show_plots(df_sorted.index)
             
             
 """
