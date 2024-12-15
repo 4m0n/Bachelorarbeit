@@ -1,12 +1,12 @@
 ---
 ReCalculate: false
 ReCalculateOnlyNew: false
-Value: Flux
+Value: Mag
 
 ExampleGalaxies: 
   null: &empty []
   gal0: &gal0 ["Mrk110","MARK6"]
-  gal1: &gal1 ["NGC1566","NGC4593","NGC4131"]
+  gal1: &gal1 ["WISEA J012354.17-003449.7","WISEA J015957.63+003310.3","WISEA J014412.78-000610.6","WISEA J015307.72+001304.0","WISEA J004701.68+003114.0","WISEA J012050.93-001832.8","ZTF20aahgivv","WISEA J003711.00+002127.8"]
   gal2: &gal2 ["ESO253-G003","Mrk110","PG0043+039","IRAS23226-3843"]
   gal3: &gal3 ["NGC4826","NGC2258","ESO506-G04","NGC3783","NGC5899","NGC4748","NGC3147","PKS0131-522","NGC5078","NGC5291","NGC3227","NGC428","NGC404","NGC3962","ESO512-G20","UGC6728","NGC1068","MARK391","NGC2617","NGC676",
        "IC4296","ESO362-G18","NGC4105","ESO420-G13","NGC1241","NGC5033","NGC7552","NGC4700","NGC7590","UGC3478","NGC2639","IC1459","NGC3281","M31","NGC2217","NGC5005","NGC7410","ESO373-G29","NGC4051","NGC4736","NGC4278",
@@ -20,7 +20,7 @@ ExampleGalaxies:
   others: &others ["NGC3783","NGC428","ESO362-G18","NGC4736","NGC3516","MARK6","NGC4151","IGRJ16024-6107","NGC4593","NGC1204"] 
 
 Plots:
-  TargetGalaxies: *empty
+  TargetGalaxies: *gal1
   ShowAllPlots: true # zeigt jede Galaxie einzeln
   IgnoreConditions: false # zeigt alle Plots und nicht nur die, die die Bedingungen erfüllen
   ShowGroupPlot: false # zeigt alle Galaxien als Punkte in einem Plot
@@ -28,6 +28,7 @@ Plots:
   ShowClassifyPlot: false
   sortedPlot: false
   changeActivity: false
+  statisticalDistribution: false
 Thresholds:
   F_threshold: 0.01
   R_threshold: 1.2

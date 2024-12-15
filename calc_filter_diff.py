@@ -874,5 +874,6 @@ start()
 
 
 # TODO: Lichtkurven importieren mit Koordinaten
+# ! Erst Filter anpassen und danach nochmal die Kameras
 
 #ESO 253 G003

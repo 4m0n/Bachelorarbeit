@@ -102,6 +102,7 @@ class Conditions:
         self.StartEndDiff = StartEndDiff
         if classify == False:
             return Conditions.changeActivity(self)
+            #return Conditions.changeActivity(self)
             #return Conditions.F_var_R(self)[0] and Conditions.minPoints(self) #(Conditions.periodic(self) or Conditions.linear(self)) and Conditions.minPoints(self) #and Conditions.minPoints(self)
         elif classify:
             return Conditions.periodic(self), Conditions.linear(self), Conditions.supernova(self), Conditions.F_var_R(self), Conditions.minPoints(self)
@@ -119,8 +120,7 @@ class Conditions:
         return self.amp_diff > amp_diff_threshold/2 and self.T / (60 * 60 * 24) * 365 < 365*10 and self.T /(60 * 60 * 24) * 365 > 50
 
     def linear(self):
-        return ((self.T / (60 * 60 * 24) * 365 > self.Dt * 2) and 
-                self.amp_diff > amp_diff_threshold * 2)
+        return (self.T / (60 * 60 * 24) * 365 > self.Dt * 2) and (self.amp_diff > amp_diff_threshold * 2)
 
     def supernova(self):
         peak = False
@@ -145,13 +145,30 @@ class Conditions:
                 self.T > T_threshold[0] and 
                 self.T / (60 * 60 * 24) * 365 < self.Dt * 2) and self.T / (60 * 60 * 24) * 365 > self.Dt/4 
         
-        return (abs(self.StartEndDiff) > 0.3) #and (linear or periodic)  
+        return (abs(self.StartEndDiff) > 0.25) #and (linear or periodic)  
             
     def minPoints(self):
         return self.lange > 250
 CONDITION = Conditions().main
 
 class Plots:
+    def statisticalDistribution(df):
+        groups = pd.DataFrame()
+        def count_true(columne):
+            return sum(1 for value in columne if (value is True) or (isinstance(value, tuple) and value[0] == True))
+
+        console.print(df.to_string())
+        console.print(df.columns.to_list())
+
+        groups = df.apply(count_true, axis=0)
+        groups = groups.to_frame().T
+        groups.index = ["count"]
+        groups.loc['count_div_100'] = groups.loc['count'] / len(df) * 100
+        console.print(len(df))
+        console.print(groups)
+
+        #console.print(groups.to_latex())
+        
     def periodic_check_with_significance(name):
         curve = FileManager.load_data(name)
         #file2 = BasicCalcs.rolling_mid(curve)
@@ -275,7 +292,7 @@ class Plots:
         # peakC = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=15) # peakC
         # lange = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=16) # pointCount
         
-        name, F_var, R, F_and_R, cuts, amplitude, amp_diff, T, periodicpercent,Dt, std, up, down, mean, peakA, peakC, lange,StartEndDiff = FindActive.load_parameters(variante=1)
+        name, F_var, R, F_and_R, cuts, amplitude, amp_diff, T, periodicpercent,Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff = FindActive.load_parameters(variante=1)
         
         x = "F_var"
         y = "R"
@@ -640,9 +657,11 @@ class FindActive:
             plt.tight_layout()
             plt.show()
         if len(curve.index) > 150:
+            if np.mean(curve[value][cut:]) - np.mean(curve[value][:cut]) == None:
+                return 0.0
             return  np.mean(curve[value][cut:]) - np.mean(curve[value][:cut])
         else:
-            return 0
+            return 0.0
         
 
 
@@ -650,21 +669,26 @@ class FindActive:
         
         if variante == 0:
             galaxy_active = pd.read_csv(path + "new_active_galaxies.csv")
-            cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values
-            F = galaxy_active.loc[galaxy_active["name"] == name, "activity"].values
-            R = galaxy_active.loc[galaxy_active["name"] == name, "R"].values
-            amp_diff = galaxy_active.loc[galaxy_active["name"] == name, "amp_diff"].values
-            T = galaxy_active.loc[galaxy_active["name"] == name, "period"].values
-            Dt = galaxy_active.loc[galaxy_active["name"] == name, "Dt"].values
-            std = galaxy_active.loc[galaxy_active["name"] == name, "std"].values
-            up = galaxy_active.loc[galaxy_active["name"] == name, "up"].values
-            down = galaxy_active.loc[galaxy_active["name"] == name, "down"].values
-            mean = galaxy_active.loc[galaxy_active["name"] == name, "mean"].values
-            peakA = galaxy_active.loc[galaxy_active["name"] == name, "peakA"].values
-            peakC = galaxy_active.loc[galaxy_active["name"] == name, "peakC"].values
-            lange = galaxy_active.loc[galaxy_active["name"] == name, "pointCount"].values
-            periodicpercent = galaxy_active.loc[galaxy_active["name"] == name, "periodicpercent"].values
-            StartEndDiff = galaxy_active.loc[galaxy_active["name"] == name, "StartEndDiff"].values
+            cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values[0]
+            F = galaxy_active.loc[galaxy_active["name"] == name, "activity"].values[0]
+            R = galaxy_active.loc[galaxy_active["name"] == name, "R"].values[0]
+            amp_diff = galaxy_active.loc[galaxy_active["name"] == name, "amp_diff"].values[0]
+            T = galaxy_active.loc[galaxy_active["name"] == name, "period"].values[0]
+            Dt = galaxy_active.loc[galaxy_active["name"] == name, "Dt"].values[0]
+            std = galaxy_active.loc[galaxy_active["name"] == name, "std"].values[0]
+            up = galaxy_active.loc[galaxy_active["name"] == name, "up"].values[0]
+            down = galaxy_active.loc[galaxy_active["name"] == name, "down"].values[0]
+            mean = galaxy_active.loc[galaxy_active["name"] == name, "mean"].values[0]
+            peakA = galaxy_active.loc[galaxy_active["name"] == name, "peakA"].values[0]
+            peakC = galaxy_active.loc[galaxy_active["name"] == name, "peakC"].values[0]
+            lange = galaxy_active.loc[galaxy_active["name"] == name, "pointCount"].values[0]
+            periodicpercent = galaxy_active.loc[galaxy_active["name"] == name, "periodicpercent"].values[0]
+            StartEndDiff = galaxy_active.loc[galaxy_active["name"] == name, "StartEndDiff"].values[0]
+            ehm = {
+                "R": R, "F": F, "amp_diff": amp_diff, "T": T, "Dt": Dt,
+                "std": std, "up": up, "down": down, "mean": mean,
+                "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent,"StartEndDiff":StartEndDiff
+            }
             
             return {
                 "R": R, "F": F, "amp_diff": amp_diff, "T": T, "Dt": Dt,
@@ -691,15 +715,13 @@ class FindActive:
             peakC = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=15) # peakC
             lange = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=16) # pointCount
             StartEndDiff = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=17) # StartEndDiff
+            return name, F_var, R, F_and_R, cuts, amplitude,amp_diff, T, periodicpercent, Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff
             
-            return {name, F_var, R, F_and_R, cuts, amplitude, 
-                    amp_diff, T, periodicpercent, Dt, std, up, 
-                    down, mean, peakA, peakC, lange, StartEndDiff
-            }
             
     def FourierLombScargle(name,plot = False):
         curve = FileManager.load_data(name)
         #file2 = BasicCalcs.rolling_mid(curve)
+        
         file2 = BasicCalcs.normalize_null(curve)
         file2.dropna(inplace=True)
         file2[value] = file2[value] - 0.5
@@ -738,8 +760,8 @@ class FindActive:
             ax_t.plot(numeric_index, file2[value].values, 'b+')
             ax_t.plot(x,y-0.5, label = "Sinus Fit", color = "green")
             ax_t.set_xlabel(f'Zeit in [Jahren]\nTime [1/y] - Fit: {Tsin/(2*np.pi)*teilen} "Fourier: {frequency[peaks]*teilen} -> Fit T = {1/(Tsin/(2*np.pi)*teilen)}')
-            ax_w.plot(1/(frequency*teilen), power)
-            ax_w.vlines(1/(Tsin/(2*np.pi)*teilen),min(power),max(power),color = "red")
+            ax_w.plot((frequency*teilen), power)
+            ax_w.vlines((Tsin/(2*np.pi)*teilen),min(power),max(power),color = "red")
             ax_w.set_xlabel('Period duration [1/Jahre]')
             ax_w.set_ylabel('Normalized amplitude')
             ax_t.grid(True, which="both", linestyle="--", linewidth=0.5)
@@ -753,7 +775,7 @@ class FindActive:
         file2 = curve.copy()
         #print(f"Max: {file2[value].max()} Min: {file2[value].min()}, Zsm: {file2[value].max() / file2[value].min()}")
         if file2[value].max() / file2[value].min() <= 0:
-            print(f"\nALARM {file2[value].max() / file2[value].min()}\n")
+            console.log(f"\nALARM {file2[value].max() / file2[value].min()}\n")
         return file2[value].max() / file2[value].min()
     
     def fractional_variation(name):
@@ -943,7 +965,7 @@ if config["Plots"]["ShowFourierPlot"]:
             params = FindActive.load_parameters(i[:-4])
             if CONDITION(**params,classify=True) or config["Plots"]["IgnoreConditions"]:
                 FindActive.FourierLombScargle(i[:-4],plot = True)
-if config["Plots"]["ShowClassifyPlot"] or config["Plots"]["sortedPlot"]:
+if config["Plots"]["ShowClassifyPlot"] or config["Plots"]["sortedPlot"] or config["Plots"]["statisticalDistribution"]:
     liste = listdir("final_light_curves")
     galaxy_active = pd.read_csv(path + "new_active_galaxies.csv")
     groups = pd.DataFrame()
@@ -970,7 +992,6 @@ if config["Plots"]["ShowClassifyPlot"] or config["Plots"]["sortedPlot"]:
 
         groups = pd.concat([groups, add])    
     
-    print(groups)  
     def count_true(row):
         return sum(1 for value in row if (value is True) or (isinstance(value, tuple) and value[0] == True))
 
@@ -978,9 +999,14 @@ if config["Plots"]["ShowClassifyPlot"] or config["Plots"]["sortedPlot"]:
     df_sorted = groups.sort_values(by="True_Count", ascending=False)
     df_sorted = df_sorted[df_sorted["minPoint"] == True]
     #df_sorted = df_sorted.drop(columns=["True_Count"])
-        
-    console.print(df_sorted.to_string())
-    Plots.show_plots(df_sorted.index)
+    
+    if config["Plots"]["statisticalDistribution"]:
+        Plots.statisticalDistribution(df_sorted)
+    if config["Plots"]["ShowClassifyPlot"]:    
+        console.print(df_sorted.to_string())
+    if config["Plots"]["sortedPlot"]:
+        #df_sorted.to_csv("sortedcurves.csv")
+        Plots.show_plots(df_sorted.index)
             
 if config["Plots"]["changeActivity"]:
     if show_galaxies != []:
@@ -1002,3 +1028,10 @@ if config["Plots"]["changeActivity"]:
     
     
 """
+
+
+
+# NGC 676, NGC 1275, NGC 3516,NGC 5273,NGC 4253,NGC 5548,Mrk 1044
+
+#PG 1149-110
+#NGC 4235
