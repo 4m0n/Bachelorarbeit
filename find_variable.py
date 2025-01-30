@@ -1026,7 +1026,7 @@ if config["Plots"]["changeActivity"]:
 
     TODO: beim speichern der finalen kurve leerzeichen entfernen
     
-    
+    #! MRK 817 runterladen
 """
 
 

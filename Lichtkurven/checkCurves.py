@@ -4,13 +4,24 @@ import os
 from os.path import isfile, join
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use('TkAgg') 
+#matplotlib.use('TkAgg') 
 import numpy as np
 from prompt_toolkit import prompt
+from matplotlib.widgets import TextBox, Button
 
 load_path = "final_light_curves/"
 active_path = "activity_curves/"
 value = "Flux"
+
+kategorien = {
+    0: "unbekannt",
+    1: "Kategorie 1",
+    2: "Kategorie 2",
+    3: "Kategorie 3",
+    4: "Kategorie 4",
+    5: "Kategorie 5",
+}
+
 class FileManager:
     def load_data(file):
         if os.path.exists(load_path + file + ".csv"):
@@ -37,27 +48,109 @@ class BasicCalcs:
         file2.sort_index(inplace=True)
         file2[value] = file2[value].rolling(window=rolling_time, center = True, min_periods = 4).mean()
         return file2
+    def galaxie_list(data):
+        data = pd.read_csv("galaxienotes.csv")
+        
+        index_list = pd.unique(data["category"])
+        index_list = reversed(np.sort(index_list))
+        
+        data["fullname"] = ""
+        for i in range(len(data)):
+            newname = str(data["newname"].iloc[i])
+            prefix = str(data["prefix"].iloc[i])
+            name = str(data["name"].iloc[i])
+            
+            if len(newname) > 1 and newname != "nan":
+                if len(prefix) > 1 and prefix != "nan":
+                    data.loc[i, "fullname"] = f'{prefix}-{newname}'
+                else:
+                    data.loc[i, "fullname"] = newname
+            elif len(prefix) > 1 and prefix != "nan":
+                data.loc[i, "fullname"] = f'{prefix}-{name}'
+            else:
+                data.loc[i, "fullname"] = name
+                
+        #data["fullname"] = data["prefix"] + "-" + data["newname"]
+        data['fullname'] = data['fullname'].fillna(data['name'])
+        data["fullname"] = data["fullname"].str.lower()
+        data.sort_values(by = "fullname", ascending=True, inplace = True)
+        
+        string = ""
+        for i in index_list:
+            if i == -1:
+                string += f"==== Ohne Kat. ====\n"
+            else:
+                string += f"==== Kat: {i} ====\n"
+            filtered_data = data[data["category"] == i]
+            # Hinzufügen der 'fullname'-Werte zur Zeichenkette
+            for fullname in filtered_data["fullname"].values:
+                string += f"{fullname}\n"
+                
+        with open("Galaxie_Liste.csv", "w") as file:
+            file.write(string)
            
 class Plots:
-    def show_plots(sortname = pd.DataFrame(),skip = "None"):
+    def show_plots(sortname = pd.DataFrame(),skip = "None", cat = 0):
         files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
+        files = [f.replace(".csv","") for f in files]
         if len(sortname) > 0:
-            name_order = {name: i for i, name in enumerate(sortname+".csv")}
+            name_order = {name: i for i, name in enumerate(sortname)}
             sorted_names = sorted(files, key=lambda x: name_order.get(x, float('inf')))  # Standardwert für fehlende Namen
             files = sorted_names
+            # alphabetisch sortieren
+            files = [f for f in files if f in (sortname.values).tolist()]
+            
+        files.sort()
         
+        # nach neuem Namen sortieren
+        order = pd.read_csv("galaxienotes.csv")
+        order = order[order["name"].isin(files)]
+        order["fullname"] = ""
+        for i in range(len(order)):
+            newname = str(order["newname"].iloc[i])
+            prefix = str(order["prefix"].iloc[i])
+            name = str(order["name"].iloc[i])
+            
+            if len(newname) > 1 and newname != "nan":
+                if len(prefix) > 1 and prefix != "nan":
+                    order.loc[i, "fullname"] = f'{prefix}-{newname}'
+                else:
+                    order.loc[i, "fullname"] = newname
+            elif len(prefix) > 1 and prefix != "nan":
+                order.loc[i, "fullname"] = f'{prefix}-{name}'
+            else:
+                order.loc[i, "fullname"] = name
+        #order["fullname"] = order["prefix"] + "-" + order["newname"]
+        order['fullname'] = order['fullname'].fillna(order['name'])
+        order["fullname"] = order["fullname"].replace(" ","")
+        order["fullname"] = order["fullname"].str.lower()
+        order.sort_values(by = "fullname", ascending=True, inplace = True)
+
+        files = order["name"].values.tolist()
         
+        if cat > 0:
+            order = pd.read_csv("new_active_galaxies.csv")
+            order = order[order["name"].isin(files)]
+            order.sort_values(by = "activity", ascending=False, inplace = True)
+            files = order["name"].values.tolist()
+            files2 = []
+            for val in files:
+                files2.append(val+".csv")
         s = True
+        
+        
+        #print("\n\nSortierung")
+    
         for file in files:
-            print(file)
             if skip != "None":
-                if file[:-4] == skip:
+                if file == skip:
                     s = False
                 if s: continue
-            name = file[:-4].replace(" ","")
-            Plots.plot_curves(file[:-4])
-            
-    def plot_curves(name):
+            name = file.replace(" ","")
+            #print(f"Name: {order.loc[order['name'] == name, 'name'].values[0]} Wert: {order.loc[order['name'] == name, 'activity'].values[0]}")
+            Plots.plot_curves(file)
+    
+    def plot_curves2(name):
 
         file2 = FileManager.load_data(name)
         file = BasicCalcs.normalize_null(file2)
@@ -98,16 +191,6 @@ class Plots:
         y_1 = file.loc[file["Filter"] == "V", value].values.copy()
         y_2 = file.loc[file["Filter"] == "g", value].values.copy()
 
-        # params = FindActive.load_parameters(name)
-        # if name in galaxy_active["name"].values:
-        #     if not CONDITION(**params):
-        #         #plt.title(f"NICHT VARIABEL Galaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\nTR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
-        #         plt.title(f"NICHT VARIABEL Galaxy: {name}")
-        #     else:
-        #         #plt.title(f"VARIABEL \nGalaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\n TR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
-        #         plt.title(f"VARIABEL \nGalaxy: {name}")
-        # else:
-        #     plt.title(f"Galaxy: {name} - nicht gefunden")
         liste = pd.read_csv("sortedcurves.csv")
         def remove_numbers(value):
             if isinstance(value, str):  # Prüfen, ob der Wert ein String ist
@@ -116,7 +199,6 @@ class Plots:
             return value
 
         # Anwenden der Funktion auf alle Zellen
-        #liste2 = liste.map(remove_numbers)
         
         def remove_numbers(value):
             if isinstance(value, str):  # Prüfen, ob der Wert ein String ist
@@ -148,32 +230,255 @@ class Plots:
         plt.legend(fontsize=10, frameon=True, fancybox=True, framealpha=0.7)
         plt.tight_layout()
         plt.show()
-        
-        gnotes = pd.read_csv("galaxienotes.csv")
-        notes = str(gnotes.loc[gnotes['name'] == name, "notes"].values[0])
-        if notes == "nan":
-            notes = ""
-        notes = prompt(f"Galaxie {name} Notizen: ", default=notes)
-        gnotes.loc[gnotes['name'] == name, "notes"] = notes
-        gnotes.to_csv("galaxienotes.csv", index=False)
-
         plt.close()
         
+    def plot_curves(name):
+    
+        file = FileManager.load_data(name)
+        
+        if False:
+            # Normal Fluss
+            file = BasicCalcs.normalize_null(file2)
+            file[value] = -file[value]
+        else:
+            # Relative Mag
+            file[value] = file[value]/min(file[value])
+            a = file[value].copy()
+            file[value] = 2.5 * np.log10(file[value])
+            b = file[value].copy()
+                            
+        file2 = BasicCalcs.rolling_mid(file.copy(),"30D")
+        x, y, cam = file.index.copy(), file[value].copy(), file["Camera"].copy()
+        x1, y1 = file2.index.copy(), file2[value].copy()
+        # Kamera farben
+        
+        farben = [
+            "blue", "black", "magenta", "orange", "purple", 
+            "brown", "gray", "olive", "darkblue", "lime", 
+            "indigo", "gold", "darkgreen", "teal", "red", 
+            "maroon", "navy", "darkred", "forestgreen", 
+            "slategray", "darkslateblue", "chocolate", "darkorange", 
+            "seagreen", "sienna", "darkmagenta", "midnightblue", 
+            "firebrick", "cadetblue", "dodgerblue", "peru", 
+            "rosybrown", "saddlebrown", "darkolivegreen", "steelblue", 
+            "tomato", "mediumblue", "deepskyblue", "crimson", "mediumvioletred", 
+            "orchid", "plum", "slateblue", "turquoise", "violet", "darkcyan", 
+            "darkorchid", "mediumorchid"
+        ]
+        
+        cameras = cam.unique()  
+        c2 = []
+        for i in cam:
+            c2.append(farben[np.where(cameras == i)[0][0]])
+            
+        c3 = []
+        c4 = []
+        for index, i in enumerate(cam):
+            if file["Filter"].iloc[index] == "V":
+                c3.append(farben[np.where(cameras == i)[0][0]])
+            else:
+                c4.append(farben[np.where(cameras == i)[0][0]])
+                
+        x_1 = file.loc[file["Filter"] == "V", :].index.copy()
+        x_2 = file.loc[file["Filter"] == "g", :].index.copy()
+        y_1 = file.loc[file["Filter"] == "V", value].values.copy()
+        y_2 = file.loc[file["Filter"] == "g", value].values.copy()
+
+        liste = pd.read_csv("sortedcurves.csv")
+        def remove_numbers(value):
+            if isinstance(value, str):  # Prüfen, ob der Wert ein String ist
+                if value[0] == "(":
+                    return value[1:6]
+            return value
+
+        # Anwenden der Funktion auf alle Zellen
+        
+        def remove_numbers(value):
+            if isinstance(value, str):  # Prüfen, ob der Wert ein String ist
+                if value[0] == "(":
+                    return value[1:6]
+            return value
+
+        # Leeren DataFrame mit gleicher Struktur erstellen
+        liste2 = pd.DataFrame(index=liste.index, columns=liste.columns)
+
+        # Durch jede Zelle des DataFrames iterieren
+        for row in range(liste.shape[0]):  # Zeilenweise
+            for col in range(liste.shape[1]):  # Spaltenweise
+                liste2.iloc[row, col] = remove_numbers(liste.iloc[row, col])
         
         
+        liste2 = liste2.drop(columns = ["True_Count"])
+        def submit(event):
+            global rvalue1,rvalue2,prefix1,newname1
+            gnotes = pd.read_csv("galaxienotes.csv")
+            notes = str(gnotes.loc[gnotes['name'] == name, "notes"].values[0])
+            category = str(gnotes.loc[gnotes['name'] == name, "category"].values[0])
+            prefix1 = str(gnotes.loc[gnotes['name'] == name, "prefix"].values[0])
+            newname1 = str(gnotes.loc[gnotes['name'] == name, "newname"].values[0])
+            if notes == "nan":
+                notes = ""
+            if category == -1:
+                category = ""
+            if prefix1 == "nan":
+                prefix1 = ""
+            if newname1 == "nan":
+                newname1 = ""
+            try:
+                rvalue1 = float(x_textbox.text)
+            except:
+                rvalue1 = category
+            if type(rvalue1) == type("string"):
+                rvalue1 = -1
+                
+            rvalue2 = y_textbox.text
+            prefix1 = x1_textbox.text
+            newname1 = y2_textbox.text
+            gnotes.loc[gnotes['name'] == name, "category"] = rvalue1
+            gnotes.loc[gnotes['name'] == name, "notes"] = str(rvalue2)
+            gnotes.loc[gnotes['name'] == name, "prefix"] = str(prefix1)
+            gnotes.loc[gnotes['name'] == name, "newname"] = str(newname1)
+            gnotes.to_csv("galaxienotes.csv", index=False)
+            
+            BasicCalcs.galaxie_list(gnotes)
+            
+            
+        def next(event):
+            submit(event)
+            plt.close()
+        def submit_exit(event):
+            submit(event)
+            exit()
+        gnotes = pd.read_csv("galaxienotes.csv")
+        notes = str(gnotes.loc[gnotes['name'] == name, "notes"].values[0])
+        category = str(gnotes.loc[gnotes['name'] == name, "category"].values[0])
+        prefix = str(gnotes.loc[gnotes['name'] == name, "prefix"].values[0])   
+        newname = str(gnotes.loc[gnotes['name'] == name, "newname"].values[0])
+        if notes == "nan":
+            notes = ""
+        if float(category) == -1:
+            category = ""
+        if prefix == "nan":
+            prefix = ""
+        if newname == "nan":
+            newname = ""
+        fig, ax = plt.subplots()
+        #plt.subplots_adjust(bottom=0.2,top=0.85)
+        plt.subplots_adjust(bottom=0.2)
+
+        axbox1 = fig.add_axes([0.12, 0.1, 0.1, 0.05])
+        x_textbox = TextBox(axbox1, f"Category:", initial = category)
+        
+        axbox11 = fig.add_axes([0.30, 0.1, 0.1, 0.05])
+        x1_textbox = TextBox(axbox11, f"Prefix:", initial = prefix)
+        
+        
+        axbox2 = fig.add_axes([0.12, 0.05, 0.5, 0.05])
+        y_textbox = TextBox(axbox2, f"Note:", initial = notes)
+
+        axbox22 = fig.add_axes([0.12, 0.00, 0.4, 0.05])
+        y2_textbox = TextBox(axbox22, f"Name:", initial = newname)
+        
+        axbox3 = fig.add_axes([0.71, 0.05, 0.1, 0.075])
+        submit_button = Button(axbox3, "Save")
+        
+        axbox33 = fig.add_axes([0.82, 0.05, 0.08, 0.075])
+        submit_button2 = Button(axbox33, "Next")        
+                
+        axbox4 = fig.add_axes([0.91, 0.05, 0.06, 0.075])
+        exit_button = Button(axbox4, "Exit")
+        
+        submit_button.on_clicked(submit)
+        submit_button2.on_clicked(next)
+        exit_button.on_clicked(submit_exit)
+
+        def titleName(name,liste2, prefix, newname):
+            name2 = name
+            if newname != "":
+                name2 = newname
+            if prefix != "":
+                name2 = f"{prefix}-{name2}"
+            eigenschaften = liste2.loc[liste2['name'] == name, liste2.columns != 'name'].to_string(index=False)
+            
+            if newname == "": 
+                return f"{name2}"
+            else:
+                return f"New: {name2}\nOld:{name}" 
+        t = titleName(name,liste2, prefix, newname)
+        #ax.set_title(f"Galaxy: {name}\n{liste2.loc[liste2['name'] == name, liste2.columns != 'name'].to_string(index=False)}")
+        ax.set_title(t)
+        ax.plot(x1, y1, zorder=10, label="30 Tage", color="red")
+        ax.scatter(x_1, y_1, c=c3, alpha=0.4, zorder=5, marker="x")  # plot verschobene orginalpunkte
+        ax.scatter(x_2, y_2, c=c4, alpha=0.4, zorder=5, marker="o")  # plot verschobene orginalpunkte
+
+        ax.grid(color='grey', linestyle='--', linewidth=0.5)
+        ax.set_xlabel("Zeit", fontsize=12)
+        ax.set_ylabel("Fluss (normiert auf 1)", fontsize=12)
+        ax.legend(fontsize=10, frameon=True, fancybox=True, framealpha=0.7)
+        plt.show()
+        
+        return 0        
         
 if True:
+
     liste = listdir("final_light_curves")
     df_sorted = pd.read_csv("sortedcurves.csv")
 
     galaxienotes = pd.DataFrame({
         'name': df_sorted['name'],
-        'notes': [None] * len(df_sorted)
+        "category": [-1] * len(df_sorted),
+        'notes': [None] * len(df_sorted),
+        'prefix': [""] * len(df_sorted),
+        'newname': [""] * len(df_sorted)
     }) 
     if not os.path.exists("galaxienotes.csv"):
         # DataFrame in die Datei schreiben
         galaxienotes.to_csv("galaxienotes.csv", index=False)
-    print(f"\n\nWo soll es losgehen? \n1 - Ganz am Anfang \n2 - Bei der ersten Galaxie ohne Beschriftung\n3 - Für Galaxie auswahl\n\n")
+    data = pd.read_csv("galaxienotes.csv")    
+    if data.shape[1] == 3:
+        # Eine dritte Spalte mit -1 hinzufügen
+        data['category'] = -1
+        data["prefix"] = ""
+        data["newname"] = ""
+        # DataFrame in die Datei zurückschreiben
+        data.to_csv("galaxienotes.csv", index=False)
+    
+    # sort galaxienotes for name
+    data = pd.read_csv("galaxienotes.csv")
+    data["fullname"] = ""
+    for i in range(len(data)):
+        newname = str(data["newname"].iloc[i])
+        prefix = str(data["prefix"].iloc[i])
+        name = str(data["name"].iloc[i])
+        
+        if len(newname) > 1 and newname != "nan":
+            if len(prefix) > 1 and prefix != "nan":
+                data.loc[i, "fullname"] = f'{prefix}-{newname}'
+            else:
+                data.loc[i, "fullname"] = newname
+        elif len(prefix) > 1 and prefix != "nan":
+            data.loc[i, "fullname"] = f'{prefix}-{name}'
+        else:
+            data.loc[i, "fullname"] = name
+            
+    #data["fullname"] = f'{data["prefix"]}-{data["newname"]}'
+    print(f"dada: {data}")
+    data['fullname'] = data['fullname'].fillna(data['name'])
+    
+    
+    data["fullname"] = data["fullname"].replace(" ","", inplace=True)
+    data["fullname"] = data["fullname"].str.lower()
+    data.sort_values(by = "fullname", ascending=True, inplace = True)
+    
+    data.drop(columns = ["fullname"], inplace = True)
+    data.to_csv("galaxienotes.csv", index=False)
+
+    
+            
+        
+        
+        
+    print(f"\n\nWo soll es losgehen? \n1 - Ganz am Anfang \n2 - Bei der ersten Galaxie ohne Kategorie\n3 - Für Galaxie auswahl mit Name\n4 - Für Kategorie [?] [?]\n\n")
     number = input(f"\n\nZahl: ")
     if number == "1":
         print("\n\n======= Galaxienotizen =======\n\n")
@@ -181,13 +486,45 @@ if True:
     elif number == "2":
         print("\n\n======= Galaxienotizen =======\n\n")
         data = pd.read_csv("galaxienotes.csv")
-        first_empty_note = data[data['notes'].isna()].iloc[0]
-        print(first_empty_note['name'])
-        Plots.show_plots(df_sorted["name"],first_empty_note['name'])
+        #first_empty_note = data[data['notes'].isna()].iloc[0]
+        first_empty_cat = data[data['category'] == -1].iloc[0]
+        print(first_empty_cat['name'])
+        Plots.show_plots(df_sorted["name"],first_empty_cat['name'])
     elif number == "3":
         name = str(input(f"\n\nName der Galaxie (aus der Liste kopieren): "))
-        print("\n\n======= Galaxienotizen =======\n\n")        
+        print("\n\n======= Galaxienotizen =======\n\n")  
+        galaxienotes = pd.read_csv("galaxienotes.csv")
+        if name in galaxienotes["newname"].values:
+            name = galaxienotes.loc[galaxienotes['newname'] == name, 'name'].values[0]
         Plots.show_plots(df_sorted["name"],name)
+    elif number == "4":
+        print("\nZuerst Kategorie eingeben, danach muss angegeben werden, wie mit der Kategorie vorgegangen werden soll.\n")
+        cat = str(input(f"\nCategory: \n"))
+        print("\nMögliche Optionen:\n = um Nur diese Kategorie anzuzeigen\n!= um alle ausser diese Kategorie anzuzeigen\n>= um nur diese und größere Kategorien anzuzeigen\n")
+        zeichen = str(input(f"=,!=,>=: "))
+        data = pd.read_csv("galaxienotes.csv")
+        if zeichen == "=":
+            show = data[data['category'] == float(cat)]
+            if len(show)<=0:
+                print("Keine Galaxien vorhanden mit diesen Kriterien")
+                exit()
+            Plots.show_plots(show["name"], cat = 1)
+        elif zeichen == "!=":
+            show = data[(data['category'] != float(cat)) & (data['category'] >= 0)]
+            if len(show)<=0:
+                print("Keine Galaxien vorhanden mit diesen Kriterien")
+                exit()
+            Plots.show_plots(show["name"], cat = 1)
+        elif zeichen == ">=":
+            show = data[data['category'] >= float(cat)]
+            if len(show)<=0:
+                print("Keine Galaxien vorhanden mit diesen Kriterien")
+                exit()
+            Plots.show_plots(show["name"], cat = 1)        
+
+        
+        
     else:
         print("\n\n Falscher Input, Neustarten...\n\n")
         exit()
+        
