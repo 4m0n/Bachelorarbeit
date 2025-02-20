@@ -352,10 +352,19 @@ def remove_outliers_mad(file, threshold=3):
     #move("Camera",cameras)
 
     return file
-def get_galaxy_name():
-    if current_ID not in filename["ID"].values:
-        return "ID not found - ID: {}".format(current_ID)
-    name = filename.loc[filename["ID"] == current_ID, "name"]
+def get_galaxy_name(f = "nope"):
+    ID = current_ID
+    if f != "nope":
+        ID = f
+
+    try:
+        ID = float(ID)
+    except:
+        return "ID not found - ID: {}".format(ID)
+
+    if ID not in filename["ID"].values:
+        return "ID not found - ID: {}".format(ID)
+    name = filename.loc[filename["ID"] == ID, "name"]
     return name.values[0]
     
 def neumann_cam_shift(data,curve):
@@ -647,7 +656,6 @@ class find_active:
         find_active.group_galaxies(acivity,R)
     def group_galaxies(acivity,R):
         file_path = path+"active_galaxies.csv"
-
         with open(file_path, 'r') as datei:
             data = datei.read()
         if str(current_ID) in data:
@@ -829,10 +837,24 @@ def add_filter_to_cams(file):
         file.loc[i, "Camera"] = f'{file.loc[i, "Filter"]}-{file.loc[i, "Camera"]}'
     return file
 def start():
-
     galaxy_active = pd.read_csv(path+"/active_galaxies.csv")
     files = [join(path, f) for f in listdir(path) if isfile(join(path, f))]
-    for f in tqdm(files):  
+    filesNameOnly = [f for f in listdir(path) if isfile(join(path, f))]
+    filesNameOnly = [f.split('-')[0] for f in filesNameOnly]
+
+    if config["ReCalculateAll"] == False:
+        existingPath = config["FilePaths"]["finished"]
+        existing = [fi[:-4].lstrip().replace(" ", "").lower() for fi in listdir(existingPath)]
+        for i in reversed(range(len(files))):
+            if files[i] == "light_curves/name_id.csv" or files[i] == "light_curves/.DS_Store" or files[i] == path + "active_galaxies.csv":
+                continue
+            name = get_galaxy_name(filesNameOnly[i]).lstrip().replace(" ", "")
+            if name.lstrip().replace(" ", "").lower() in existing:
+                files.pop(i)
+                filesNameOnly.pop(i)
+    for f in tqdm(files):
+        print(f"here we go {files}")
+
         if f != "light_curves/661431822098-light-curves.csv" and f != "light_curves/661431908458-light-curves.csv" and f != "light_curves/42949788551-light-curves.csv": # fitler for specific galaxy
             #continue
             pass
@@ -842,11 +864,14 @@ def start():
         current_ID = int(f.split("/")[-1].split("-")[0])
         global current_cuts
         current_cuts = 0
-        global plot_cuts        
+        global plot_cuts
+
+        # Skip if already exists
+
         plot_cuts = pd.DataFrame(columns = ["start","cam","shift"])
         plot_cuts = plot_cuts.astype({'start': 'datetime64[ns]', "cam": "str"})
 
-        # Nur Galaien mit gewisser Aktivität laden
+        # Nur Galaxien mit gewisser Aktivität laden
         if current_ID in galaxy_active["ID"].values:
             if (galaxy_active.loc[galaxy_active["ID"] == current_ID, "acivity"].values[0] <= treshold_F_var) and (galaxy_active.loc[galaxy_active["ID"] == current_ID, "R"].values[0] <= treshold_R):
                 pass

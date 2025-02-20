@@ -2,7 +2,7 @@
 
 Demo: false # speichert und überschreibt nichts
 ReCalculateAll: false
-Cutter: True
+Cutter: true
 ShowBothCuts: false
 Plots:
   Plot: false
@@ -10,7 +10,7 @@ Plots:
 
 FilePaths:
   name_id: "light_curves/name_id.csv"
-
+  finished: "final_light_curves/"
 Variables:
   value: "Flux"
   mid: 12

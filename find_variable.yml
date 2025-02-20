@@ -1,11 +1,11 @@
 ---
 ReCalculate: false
 ReCalculateOnlyNew: false
-Value: Mag
+Value: Flux
 
 ExampleGalaxies: 
   null: &empty []
-  gal0: &gal0 ["Mrk110","MARK6"]
+  gal0: &gal0 ["Mark817","MARK6"]
   gal1: &gal1 ["WISEA J012354.17-003449.7","WISEA J015957.63+003310.3","WISEA J014412.78-000610.6","WISEA J015307.72+001304.0","WISEA J004701.68+003114.0","WISEA J012050.93-001832.8","ZTF20aahgivv","WISEA J003711.00+002127.8"]
   gal2: &gal2 ["ESO253-G003","Mrk110","PG0043+039","IRAS23226-3843"]
   gal3: &gal3 ["NGC4826","NGC2258","ESO506-G04","NGC3783","NGC5899","NGC4748","NGC3147","PKS0131-522","NGC5078","NGC5291","NGC3227","NGC428","NGC404","NGC3962","ESO512-G20","UGC6728","NGC1068","MARK391","NGC2617","NGC676",
@@ -20,7 +20,7 @@ ExampleGalaxies:
   others: &others ["NGC3783","NGC428","ESO362-G18","NGC4736","NGC3516","MARK6","NGC4151","IGRJ16024-6107","NGC4593","NGC1204"] 
 
 Plots:
-  TargetGalaxies: *gal1
+  TargetGalaxies: *gal0
   ShowAllPlots: true # zeigt jede Galaxie einzeln
   IgnoreConditions: false # zeigt alle Plots und nicht nur die, die die Bedingungen erfüllen
   ShowGroupPlot: false # zeigt alle Galaxien als Punkte in einem Plot

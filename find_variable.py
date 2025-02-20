@@ -928,9 +928,8 @@ class FindActive:
         
 
     
-def start():    
-    
-    galaxy_active = pd.read_csv(path+"new_active_galaxies.csv")
+def start():
+    galaxy_active = pd.read_csv(path+"new_active_galaxies.csv") # wurden bereits berechnet
     files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
     show_galaxies_lower = [item.replace(" ","").lower()for item in show_galaxies]
 
@@ -938,15 +937,21 @@ def start():
         with open(path+"new_active_galaxies.csv", 'w') as datei:
             datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff\n")
 
-                     
-    files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
+    if config["ReCalculateOnlyNew"]:
+        savedCurves = [f[:-4] for f in files]
+        print(f"SavedCuirves: {savedCurves} in dings:\n{galaxy_active["name"].values}")
+        for i in reversed(range(len(savedCurves))):
+            if savedCurves[i] in galaxy_active["name"].values:
+                savedCurves.pop(i)
+                files.pop(i)
+
     for file in tqdm(files):
-        if file[:-4] not in galaxy_active["name"].values or not config["ReCalculateOnlyNew"]:
-            FileManager.group_galaxies(file[:-4])
-        else: continue
+        #if file[:-4] not in galaxy_active["name"].values or not config["ReCalculateOnlyNew"]:
+        FileManager.group_galaxies(file[:-4])
+        #else: continue
         
 
-if config["ReCalculate"]:
+if config["ReCalculate"] or config["ReCalculateOnlyNew"]:
     start()
 if config["Plots"]["ShowAllPlots"]: 
     Plots.show_plots()
@@ -1025,6 +1030,7 @@ if config["Plots"]["changeActivity"]:
 """
 
     TODO: beim speichern der finalen kurve leerzeichen entfernen
+    TODO: redshift in finalen kurven speichern 
     
     #! MRK 817 runterladen
 """
