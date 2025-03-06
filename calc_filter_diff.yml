@@ -1,6 +1,6 @@
 
 
-Demo: false # speichert und überschreibt nichts
+Demo: true # speichert und überschreibt nichts
 ReCalculateAll: false
 Cutter: true
 ShowBothCuts: false

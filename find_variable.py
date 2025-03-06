@@ -14,6 +14,7 @@ import yaml
 import scipy.signal as signal
 from astropy.timeseries import LombScargle
 from scipy.interpolate import UnivariateSpline
+import ast
 
 
 from rich import print
@@ -70,7 +71,7 @@ class Conditions:
                 formatted_value = value
             formatted_results.append((boolean, formatted_value))
         return formatted_results
-    def __init__(self,R=0,F=0,amp_diff=0,T=0,Dt = 5e8,std = 0,up = 0,down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0,StartEndDiff = 0):
+    def __init__(self,R=0,F=0,amp_diff=0,T=0,Dt = 5e8,std = 0,up = 0,down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0,StartEndDiff = 0, redshift = -1,periodicFast = 0 , classify = False):
         self.R = R
         self.F = F
         self.amp_diff = amp_diff
@@ -85,7 +86,10 @@ class Conditions:
         self.lange = lange
         self.periodicpercent = periodicpercent
         self.StartEndDiff = StartEndDiff
-    def main(self,*, R=0,F=0,amp_diff=0,T=0,Dt = 5e8, std = 0, up = 0, down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0, StartEndDiff = 0, classify = False):
+        self.classify = classify
+        self.redshift = redshift
+        self.periodicFast = periodicFast
+    def main(self,*, R=0,F=0,amp_diff=0,T=0,Dt = 5e8, std = 0, up = 0, down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0, StartEndDiff = 0, redshift = -1,periodicFast = 0, classify = False):
         self.R = R
         self.F = F
         self.amp_diff = amp_diff
@@ -100,12 +104,14 @@ class Conditions:
         self.lange = lange
         self.periodicpercent = periodicpercent
         self.StartEndDiff = StartEndDiff
+        self.classify = classify
+        self.redshift = redshift
+        self.periodicFast = periodicFast
         if classify == False:
-            return Conditions.changeActivity(self)
-            #return Conditions.changeActivity(self)
+            return Conditions.periodicFast(self) and Conditions.minPoints(self) and not Conditions.supernova(self)
             #return Conditions.F_var_R(self)[0] and Conditions.minPoints(self) #(Conditions.periodic(self) or Conditions.linear(self)) and Conditions.minPoints(self) #and Conditions.minPoints(self)
         elif classify:
-            return Conditions.periodic(self), Conditions.linear(self), Conditions.supernova(self), Conditions.F_var_R(self), Conditions.minPoints(self)
+            return Conditions.periodic(self), Conditions.linear(self), Conditions.supernova(self), Conditions.F_var_R(self), Conditions.periodicFast(self), Conditions.minPoints(self)
     
     def F_var_R(self):
         bedingung = self.R > R_threshold and F_threshold < self.F
@@ -113,9 +119,14 @@ class Conditions:
         #console.print(f"R: {self.R} - {self.R > R_threshold} and F: {self.F} - {self.F > F_threshold} ---> {bedingung}")
         return bedingung, self.R+self.F
     def periodic(self):
-        return (self.amp_diff > amp_diff_threshold and 
-                self.T > T_threshold[0] and 
-                self.T / (60 * 60 * 24) * 365 < self.Dt * 2), self.periodicpercent *100
+        if self.classify == False:
+            return (self.amp_diff > amp_diff_threshold and
+                    self.T > T_threshold[0] and
+                    self.T / (60 * 60 * 24) * 365 < self.Dt * 2)
+        else:
+            return (self.amp_diff > amp_diff_threshold and
+                    self.T > T_threshold[0] and
+                    self.T / (60 * 60 * 24) * 365 < self.Dt * 2), self.periodicpercent *100
     def periodic2(self):
         return self.amp_diff > amp_diff_threshold/2 and self.T / (60 * 60 * 24) * 365 < 365*10 and self.T /(60 * 60 * 24) * 365 > 50
 
@@ -146,7 +157,9 @@ class Conditions:
                 self.T / (60 * 60 * 24) * 365 < self.Dt * 2) and self.T / (60 * 60 * 24) * 365 > self.Dt/4 
         
         return (abs(self.StartEndDiff) > 0.25) #and (linear or periodic)  
-            
+
+    def periodicFast(self):
+        return self.periodicFast >= 0.1
     def minPoints(self):
         return self.lange > 250
 CONDITION = Conditions().main
@@ -273,31 +286,12 @@ class Plots:
         
         
     def standart1():
-        # path1 = path+"new_active_galaxies.csv"
-        # name = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=0,dtype=str)
-        # F_var = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=1) #F_var
-        # R = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=2) #R
-        # F_and_R = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=3)
-        # cuts = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=4) #cuts
-        # amplitude = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=5) #amplitude
-        # amp_diff = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=6) #amplitude_diff
-        # T = abs(np.loadtxt(path1, delimiter=',', skiprows=1,usecols=7))
-        # periodicpercent = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=8)
-        # Dt = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=9) # delta T
-        # std = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=10) # std
-        # up = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=11) # up
-        # down = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=12) # down
-        # mean = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=13) # mean
-        # peakA = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=14) # peakA
-        # peakC = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=15) # peakC
-        # lange = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=16) # pointCount
-        
-        name, F_var, R, F_and_R, cuts, amplitude, amp_diff, T, periodicpercent,Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff = FindActive.load_parameters(variante=1)
+
+        name, F_var, R, F_and_R, cuts, amplitude, amp_diff, T, periodicpercent,Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift, periodicFast = FindActive.load_parameters(variante=1)
         
         x = "F_var"
-        y = "R"
+        y = "periodicFast"
         z, z_title = cuts, "cuts"
-        
         def setup(x):
             match x:
                 case "F_var":
@@ -320,10 +314,14 @@ class Plots:
                     x = T
                     x_title = "T"
                     threshold_x = T_threshold
+                case "periodicpercent":
+                    x = periodicpercent
+                    x_title = "periodicpercent"
+                    threshold_x = 0.0
                 case "F_and_R":
                     x = R-(F_var*1000)
                     x_title = "F_and_R"
-                    threshold_x = F_and_R_threshold
+                    threshold_x = [F_and_R_threshold]
                 case "up":
                     x = up
                     x_title = "up"
@@ -348,6 +346,15 @@ class Plots:
                     x = peakC
                     x_title = "peakC"
                     threshold_x = 0.0
+                case "redshift":
+                    x = redshift
+                    x_title = "redshift"
+                    threshold_x = 0.0
+                case "periodicFast":
+                    x = periodicFast
+                    x_title = "periodicFast"
+                    threshold_x = 0.1
+
             return x, x_title, threshold_x
         
         x, x_title, threshold_x = setup(x)
@@ -374,7 +381,6 @@ class Plots:
                 y_thresh.append(y[i])
 
         aktive_prozent = round(aktive_prozent / len(y) * 10000)/100
-        print(f"Variable Galaxien nach aktuellem Filter:\n{variabel.to_string()}")
         if type(threshold_x) == type(4.20):
             threshold_x = [threshold_x]
         if type(threshold_y) == type(4.20):
@@ -383,7 +389,6 @@ class Plots:
             plt.hlines(i,min(x),max(x)) # R
         for i in threshold_x:    
             plt.vlines(i,min(y),max(y)) # F
-        
         plt.scatter(x,y,c = z,s = 50, edgecolor = "k", alpha = 0.5,zorder = 1)
         plt.scatter(x_target,y_target,c = "red",s = 50, edgecolor = "k", alpha = 0.8,marker = 5,zorder = 2)
         plt.scatter(x_thresh,y_thresh,c = "blue",s = 50, edgecolor = "k", alpha = 0.5,marker = 4,zorder = 1)
@@ -405,12 +410,14 @@ class Plots:
         plt.close()
         
     def plot_curves(name):
-
         file2 = FileManager.load_data(name)
         file = BasicCalcs.normalize_null(file2)
         x, y, cam = file.index.copy(), file[value].copy(), file["Camera"].copy()
+        error1 = file[f"{value} Error"].copy()
         file2 = BasicCalcs.rolling_mid(file,"30D")
         x1, y1 = file2.index.copy(), file2[value].copy()
+        error2 = file2[f"{value} Error"].copy()
+
         # Kamera farben
         
         farben = config["Colors"]
@@ -433,6 +440,9 @@ class Plots:
         x_2 = file.loc[file["Filter"] == "g", :].index.copy()
         y_1 = file.loc[file["Filter"] == "V", value].values.copy()
         y_2 = file.loc[file["Filter"] == "g", value].values.copy()
+        error_1 = file.loc[file["Filter"] == "V", f"{value} Error"].values.copy()
+        error_2 = file.loc[file["Filter"] == "g", f"{value} Error"].values.copy()
+
         # === Plot
         galaxy_active = pd.read_csv(path + "new_active_galaxies.csv")
         # cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values[0]
@@ -456,19 +466,28 @@ class Plots:
         # except: tr_R = np.inf
         # try: tr_amplitude = round(amp_diff*100)/100
         # except: tr_amplitude = np.inf
+        redshift = galaxy_active.loc[galaxy_active["name"] == name, "redshift"].values[0]
+        if redshift > 0.027:
+            redshift = "Neu"
+        else:
+            redshift = "Alt"
         if name in galaxy_active["name"].values:
             if not CONDITION(**params):
                 #plt.title(f"NICHT VARIABEL Galaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\nTR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
-                plt.title(f"NICHT VARIABEL Galaxy: {name}")
+                plt.title(f"NICHT VARIABEL Galaxy: {name} - {redshift}")
             else:
                 #plt.title(f"VARIABEL \nGalaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\n TR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
-                plt.title(f"VARIABEL \nGalaxy: {name}")
+                plt.title(f"VARIABEL \nGalaxy: {name} - {redshift}")
         else:
             plt.title(f"Galaxy: {name} - nicht gefunden")
 
         plt.plot(x1,y1,zorder=10, label="30 Tage", color = "red")
         plt.scatter(x_1,y_1,c = c3, alpha=0.4, zorder=5, marker = "x") # plot verschobene orginalpunkte
         plt.scatter(x_2,y_2,c = c4, alpha=0.4, zorder=5, marker = "o") # plot verschobene orginalpunkte
+
+        #plt.errorbar(x_1, y_1, yerr=error_1, alpha=0.4, zorder=5, label='V', ecolor=c3, linestyle="None", barsabove=True,fmt="")
+        #plt.errorbar(x_2, y_2, yerr=error_2, alpha=0.4, zorder=5, label="g",ecolor=c4, linestyle="None")
+
         x_temp,y_temp,_,_,_,_ = FindActive.periodic(name)
         #x_temp,y_temp,_,_ = FindActive.peak(name)
         plt.plot(x_temp,y_temp, label = "Sinus Fit", color = "green",zorder = 9)
@@ -497,6 +516,15 @@ class Plots:
 
 
 class FileManager:
+    def loadRedshift(name1):
+        name = name1.lstrip().replace(" ","").lower()
+        galaxy_active = pd.read_csv("pyasassn_tool/mainTargets.csv",delimiter="|")
+        galaxy_active["namecheck"] = galaxy_active["name             "].str.lstrip().str.lower().str.replace(" ", "")
+
+        try:
+            return galaxy_active.loc[galaxy_active["namecheck"] == name, "redshift"].values[0]
+        except:
+            return -1
     def load_data(file):
         if os.path.exists(load_path + file + ".csv"):
             data = pd.read_csv(load_path + file + ".csv", index_col = 0)
@@ -541,11 +569,13 @@ class FileManager:
         deltaT = BasicCalcs.TimeDifference(name)
         std,up,down,mean,lange = FindActive.StdPeak(name)
         StartEndDiff = FindActive.changingActivity(name)
+        redshift = FileManager.loadRedshift(name)
+        periodicFast = FindActive.FourierFastPeriodic(name)
         if os.path.isfile(file_path) == False:
             with open(file_path, 'w') as datei:
-                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff\n")
+                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast\n")
         with open(file_path, 'a') as datei:
-            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{periodicpercent},{deltaT.days},{std},{up},{down},{mean},{peakA},{peakC},{lange},{StartEndDiff}\n")
+            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{periodicpercent},{deltaT.days},{std},{up},{down},{mean},{peakA},{peakC},{lange},{StartEndDiff},{redshift},{periodicFast}\n")
         return
     
     
@@ -600,8 +630,11 @@ class BasicCalcs:
     
     def normalize_null(file):
         curve = file.copy()
-        curve[value] = curve[value] - curve[value].min() 
-        curve[value] = curve[value]/curve[value].max()
+        curve[value] = curve[value] - curve[value].min()
+        maxValue = curve[value].max()
+        curve[value] = curve[value]/maxValue
+        curve[f"{value} Error"] = curve[f"{value} Error"]/maxValue
+
         return curve
     def TimeDifference(name):
         curve = FileManager.load_data(name)
@@ -669,7 +702,10 @@ class FindActive:
         
         if variante == 0:
             galaxy_active = pd.read_csv(path + "new_active_galaxies.csv")
-            cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values[0]
+            try:
+                cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values[0]
+            except:
+                return None
             F = galaxy_active.loc[galaxy_active["name"] == name, "activity"].values[0]
             R = galaxy_active.loc[galaxy_active["name"] == name, "R"].values[0]
             amp_diff = galaxy_active.loc[galaxy_active["name"] == name, "amp_diff"].values[0]
@@ -684,16 +720,22 @@ class FindActive:
             lange = galaxy_active.loc[galaxy_active["name"] == name, "pointCount"].values[0]
             periodicpercent = galaxy_active.loc[galaxy_active["name"] == name, "periodicpercent"].values[0]
             StartEndDiff = galaxy_active.loc[galaxy_active["name"] == name, "StartEndDiff"].values[0]
+            redshift = galaxy_active.loc[galaxy_active["name"] == name, "redshift"].values[0]
+            periodicFast = galaxy_active.loc[galaxy_active["name"] == name, "periodicFast"].values[0]
+            # liste umwandeln
+            periodicFast = np.array(ast.literal_eval(periodicFast))[0]
             ehm = {
                 "R": R, "F": F, "amp_diff": amp_diff, "T": T, "Dt": Dt,
                 "std": std, "up": up, "down": down, "mean": mean,
-                "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent,"StartEndDiff":StartEndDiff
+                "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent,"StartEndDiff":StartEndDiff, "redshift":redshift,
+                "periodicFast":periodicFast
             }
             
             return {
                 "R": R, "F": F, "amp_diff": amp_diff, "T": T, "Dt": Dt,
                 "std": std, "up": up, "down": down, "mean": mean,
-                "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent,"StartEndDiff":StartEndDiff
+                "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent,"StartEndDiff":StartEndDiff, "redshift":redshift,
+                "periodicFast":periodicFast
             }
         elif variante == 1:
             path1 = path+"new_active_galaxies.csv"
@@ -715,7 +757,12 @@ class FindActive:
             peakC = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=15) # peakC
             lange = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=16) # pointCount
             StartEndDiff = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=17) # StartEndDiff
-            return name, F_var, R, F_and_R, cuts, amplitude,amp_diff, T, periodicpercent, Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff
+            redshift = np.loadtxt(path1, delimiter=',', skiprows=1, usecols=18)  # redshift
+            periodicFast = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=19,dtype=str)
+            print(f"Ding:{periodicFast}")
+            periodicFast = np.array([float(ast.literal_eval(item)[0]) for item in periodicFast])
+            #periodicFast = np.array(ast.literal_eval(periodicFast))[0]
+            return name, F_var, R, F_and_R, cuts, amplitude,amp_diff, T, periodicpercent, Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift,periodicFast
             
             
     def FourierLombScargle(name,plot = False):
@@ -769,6 +816,42 @@ class FindActive:
             plt.get_current_fig_manager().full_screen_toggle()
             plt.show()
         return 2*np.pi*frequency[peaks], power[peaks]
+
+    def FourierFastPeriodic(name):
+        def Datetime_in_Unix(date):
+            unix = []
+            for i in date:
+                unix.append(i.timestamp())
+            return unix
+        def normalize(file):
+            value = "Flux"
+            curve = file.copy()
+            shift = 0
+            if curve[value].min() <= 0:
+                shift = curve[value].min()
+                curve[value] = curve[value] - shift + 1
+
+            curve[f"{value} Error"] = curve[f"{value} Error"] / curve[value].max()
+            curve[value] = curve[value] / curve[value].max()
+            return curve
+
+        file = pd.read_csv(f"final_light_curves/{name}.csv")
+        file = normalize(file)
+
+        t = Datetime_in_Unix(pd.to_datetime(file["JD"]))
+        mint = min(t)
+        for i in range(len(t)):
+            t[i] -= mint
+        y = []
+        for val in file["Flux"].values:
+            y.append(val)
+
+        frequency, power = LombScargle(t, y).autopower(maximum_frequency=1e-7, samples_per_peak=40)
+        freq = pd.DataFrame({"Frequency": frequency, "Power": power})
+        return [max(freq.loc[freq["Frequency"]>= 1e-8, "Power"].values)]
+
+
+
     def peak_to_peak_amplitudes(name): # returns R
         curve = FileManager.load_data(name)
         #file2 = BasicCalcs.normalize(curve)
@@ -929,17 +1012,16 @@ class FindActive:
 
     
 def start():
+    if not config["ReCalculateOnlyNew"] or not os.path.exists(path+"new_active_galaxies.csv"):
+        with open(path+"new_active_galaxies.csv", 'w') as datei:
+            datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast\n")
     galaxy_active = pd.read_csv(path+"new_active_galaxies.csv") # wurden bereits berechnet
     files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
     show_galaxies_lower = [item.replace(" ","").lower()for item in show_galaxies]
 
-    if not config["ReCalculateOnlyNew"] or not os.path.exists(path+"new_active_galaxies.csv"):
-        with open(path+"new_active_galaxies.csv", 'w') as datei:
-            datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff\n")
 
     if config["ReCalculateOnlyNew"]:
         savedCurves = [f[:-4] for f in files]
-        print(f"SavedCuirves: {savedCurves} in dings:\n{galaxy_active["name"].values}")
         for i in reversed(range(len(savedCurves))):
             if savedCurves[i] in galaxy_active["name"].values:
                 savedCurves.pop(i)
@@ -978,25 +1060,12 @@ if config["Plots"]["ShowClassifyPlot"] or config["Plots"]["sortedPlot"] or confi
         name = file[:-4]
         if name not in show_galaxies and show_galaxies != []:
             continue
-        # cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values[0]
-        # F = galaxy_active.loc[galaxy_active["name"] == name, "activity"].values[0]
-        # R = galaxy_active.loc[galaxy_active["name"] == name, "R"].values[0]
-        # amp_diff = galaxy_active.loc[galaxy_active["name"] == name, "amp_diff"].values[0]
-        # T = galaxy_active.loc[galaxy_active["name"] == name, "period"].values[0]
-        # Dt = galaxy_active.loc[galaxy_active["name"] == name, "Dt"].values[0]
-        # std = galaxy_active.loc[galaxy_active["name"] == name, "std"].values[0]
-        # up = galaxy_active.loc[galaxy_active["name"] == name, "up"].values[0]
-        # down = galaxy_active.loc[galaxy_active["name"] == name, "down"].values[0]
-        # mean = galaxy_active.loc[galaxy_active["name"] == name, "mean"].values[0]
-        # peakA = galaxy_active.loc[galaxy_active["name"] == name, "peakA"].values[0]
-        # peakC = galaxy_active.loc[galaxy_active["name"] == name, "peakC"].values[0]
-        # lange = galaxy_active.loc[galaxy_active["name"] == name, "pointCount"].values[0]  
-        # periodicpercent = galaxy_active.loc[galaxy_active["name"] == name, "periodicpercent"].values[0]      
-        params = FindActive.load_parameters(name)                
-        add = pd.DataFrame([list(CONDITION(**params,classify=True))],index = [name],columns=["periodic","linear","supernova","F_var_R","minPoint"])
-
-        groups = pd.concat([groups, add])    
-    
+        params = FindActive.load_parameters(name)
+        try:
+            add = pd.DataFrame([list(CONDITION(**params,classify=True))],index = [name],columns=["periodic","linear","supernova","F_var_R","periodicFast","minPoint"])
+            groups = pd.concat([groups, add])
+        except:
+            continue
     def count_true(row):
         return sum(1 for value in row if (value is True) or (isinstance(value, tuple) and value[0] == True))
 
@@ -1032,7 +1101,6 @@ if config["Plots"]["changeActivity"]:
     TODO: beim speichern der finalen kurve leerzeichen entfernen
     TODO: redshift in finalen kurven speichern 
     
-    #! MRK 817 runterladen
 """
 
 

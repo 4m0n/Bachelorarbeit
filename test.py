@@ -7,6 +7,12 @@ R_treshold = 1.2
 path_new = "activity_curves/new_active_galaxies.csv"
 path_old = "light_curves/active_galaxies.csv"
 path = path_new
+
+
+df = pd.read_csv('activity_curves/new_active_galaxies.csv', delimiter=",", usecols=lambda column: "Unnamed" not in column)
+df['length'] = df['name'].str.len()
+df.sort_values('length', ascending=True, inplace=True)
+print(df)
 if False: #normieren der bedingun
     daten = np.loadtxt("light_curves/active_galaxies_normiert.csv", delimiter=',', skiprows=1, usecols=-1)
     normiert = np.loadtxt(path, delimiter=',', skiprows=1, usecols=-1)
@@ -21,7 +27,7 @@ if False: #normieren der bedingun
     plt.scatter(x,norm,color = "red")
     plt.show()
 
-if True:# Korellation F_var und R
+if False:# Korellation F_var und R
     x = np.loadtxt(path, delimiter=',', skiprows=1,usecols=1) #F_var
     y = np.loadtxt(path, delimiter=',', skiprows=1,usecols=2) #R
     z = np.loadtxt(path, delimiter=',', skiprows=1,usecols=4) #cuts

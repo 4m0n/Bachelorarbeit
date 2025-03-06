@@ -29,7 +29,6 @@ console = Console()
 fig, ax = plt.subplots()
 plt.subplots_adjust(bottom=0.2)
 # I used pandas to read data from a csv file
-# but in this case I will just use dummy values as example
 X = [];Y1 = [];Y2 = [];Y3 = []
 for i in range(10):
     X.append(i)

@@ -360,6 +360,7 @@ def get_galaxy_name(f = "nope"):
     try:
         ID = float(ID)
     except:
+        print(f"ALARM {ID}")
         return "ID not found - ID: {}".format(ID)
 
     if ID not in filename["ID"].values:
@@ -853,7 +854,6 @@ def start():
                 files.pop(i)
                 filesNameOnly.pop(i)
     for f in tqdm(files):
-        print(f"here we go {files}")
 
         if f != "light_curves/661431822098-light-curves.csv" and f != "light_curves/661431908458-light-curves.csv" and f != "light_curves/42949788551-light-curves.csv": # fitler for specific galaxy
             #continue
@@ -894,6 +894,53 @@ def start():
         #visualize_with_checkbuttons(file)
 
 
+# check for unnamed galaxies
+def check_for_unnamed_galaxies():
+    # delete duplicated IDs
+    global filename
+    minusOne = filename[(filename["ID"] == -1)]
+    filename2 = filename[filename["ID"] != -1]
+    filename2 = filename.drop_duplicates(subset=['ID'],keep="first")
+    dub = pd.concat([minusOne,filename2])
+    dub.sort_values("name")
+    dub.reset_index(drop=True, inplace=True)
+
+
+    files = [f for f in listdir(path) if isfile(join(path, f))]
+    for i in reversed(range(len(files))):
+        if "-" not in files[i]:
+            files.pop(i)
+    files = [f.split('-')[0] for f in files]
+    unnamed = []
+    # files in folder
+    for f in files:
+        if int(f) not in filename["ID"].values:
+            unnamed.append(f)
+    # galaxies in csv
+    append = list(filename.loc[pd.isna(filename["name"]), "ID"].values)
+    for val in append:
+        unnamed.append(str(val))
+
+
+    for val in unnamed:
+        name = input(f"Input for unknown ID {val}: ")
+        if name == "":
+            name = "unknown"
+
+        if int(val) in filename["ID"].values:
+            filename.loc[filename["ID"] == int(val), "name"] = name
+        else:
+            add = pd.DataFrame([[int(val),name,"00 00 00.0","00 00 00"]], columns=["ID","name","ra","dec"])
+            filename = pd.concat([filename, add])
+
+        filename.reset_index(drop=True, inplace=True)
+        #print(f"val: {val}, name: {name} file: {filename.loc[filename["ID"] == int(val), "name"]}")
+    filename.to_csv("light_curves/name_id.csv", index=True)
+check_for_unnamed_galaxies()
+
+filename = pd.read_csv(filename_path, usecols=lambda column: column != 'Unnamed: 0')
+filename.reset_index(drop=True, inplace=True)
+
 start()
 
 
@@ -902,3 +949,5 @@ start()
 # ! Erst Filter anpassen und danach nochmal die Kameras
 
 #ESO 253 G003
+
+# 481036835401
