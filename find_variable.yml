@@ -38,10 +38,11 @@ ExampleGalaxies:
         'MARK421', 'IGRJ02504+5443', 'NGC7714', 'IC4687', 'MCG+02.60.017']
   fastPeriodic2: &fastPeriodic2 ["KUG1208+386","MARK993"]
 Plots:
-  TargetGalaxies: *fastPeriodic
-  ShowAllPlots: true # zeigt jede Galaxie einzeln
-  IgnoreConditions: true # zeigt alle Plots und nicht nur die, die die Bedingungen erfüllen
-  ShowGroupPlot: false # zeigt alle Galaxien als Punkte in einem Plot
+  TargetGalaxies: *empty
+  ShowAllPlots: false # zeigt jede Galaxie einzeln
+  IgnoreConditions: false # zeigt alle Plots und nicht nur die, die die Bedingungen erfüllen
+  ShowGroupPlot: true # zeigt alle Galaxien als Punkte in einem Plot
+  ShowGroupPlotAll: true
   ShowFourierPlot: false
   ShowClassifyPlot: false
   sortedPlot: false

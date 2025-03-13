@@ -159,7 +159,7 @@ class Conditions:
         return (abs(self.StartEndDiff) > 0.25) #and (linear or periodic)  
 
     def periodicFast(self):
-        return self.periodicFast >= 0.1
+        return self.periodicFast >= 0.2
     def minPoints(self):
         return self.lange > 250
 CONDITION = Conditions().main
@@ -285,13 +285,17 @@ class Plots:
         
         
         
-    def standart1():
+    def standart1(x=None,y=None,z=None,plot = True):
 
         name, F_var, R, F_and_R, cuts, amplitude, amp_diff, T, periodicpercent,Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift, periodicFast = FindActive.load_parameters(variante=1)
-        
-        x = "F_var"
-        y = "periodicFast"
-        z, z_title = cuts, "cuts"
+        if x == None:
+            x = "F_var"
+        if y == None:
+            y = "periodicFast"
+        if z == None:
+            z, z_title = cuts, "cuts"
+        else:
+            z_title = "Noch benennen"
         def setup(x):
             match x:
                 case "F_var":
@@ -302,6 +306,14 @@ class Plots:
                     x = R
                     x_title = "R"
                     threshold_x = R_threshold
+                case "F_and_R":
+                    x = R-(F_var*1000)
+                    x_title = "F_and_R"
+                    threshold_x = [F_and_R_threshold]
+                case "cuts":
+                    x = cuts
+                    x_title = "cuts"
+                    threshold_x = 0.0
                 case "amplitude":
                     x = amplitude
                     x_title = "amplitude"
@@ -318,10 +330,10 @@ class Plots:
                     x = periodicpercent
                     x_title = "periodicpercent"
                     threshold_x = 0.0
-                case "F_and_R":
-                    x = R-(F_var*1000)
-                    x_title = "F_and_R"
-                    threshold_x = [F_and_R_threshold]
+                case "Dt":
+                    x = Dt
+                    x_title = "Dt"
+                    threshold_x = 0.0
                 case "up":
                     x = up
                     x_title = "up"
@@ -345,6 +357,14 @@ class Plots:
                 case "peakC":
                     x = peakC
                     x_title = "peakC"
+                    threshold_x = 0.0
+                case "lange":
+                    x = lange
+                    x_title = "länge"
+                    threshold_x = 0.0
+                case "StartEndDiff":
+                    x = StartEndDiff
+                    x_title = "StartEndDiff"
                     threshold_x = 0.0
                 case "redshift":
                     x = redshift
@@ -381,34 +401,54 @@ class Plots:
                 y_thresh.append(y[i])
 
         aktive_prozent = round(aktive_prozent / len(y) * 10000)/100
-        if type(threshold_x) == type(4.20):
-            threshold_x = [threshold_x]
-        if type(threshold_y) == type(4.20):
-            threshold_y = [threshold_y]
-        for i in threshold_y:
-            plt.hlines(i,min(x),max(x)) # R
-        for i in threshold_x:    
-            plt.vlines(i,min(y),max(y)) # F
-        plt.scatter(x,y,c = z,s = 50, edgecolor = "k", alpha = 0.5,zorder = 1)
-        plt.scatter(x_target,y_target,c = "red",s = 50, edgecolor = "k", alpha = 0.8,marker = 5,zorder = 2)
-        plt.scatter(x_thresh,y_thresh,c = "blue",s = 50, edgecolor = "k", alpha = 0.5,marker = 4,zorder = 1)
-        
-        plt.colorbar(label=z_title)
-        plt.xlabel(x_title)
-        plt.ylabel(y_title)
-        if len(y_target)<1:
-            prozent_korrekte_vorhersagen = -1
-        else:
-            prozent_korrekte_vorhersagen = round(len(np.intersect1d(y_target, y_thresh))/len(y_target)*10000)/100
-        if len(y_thresh)<1:
-            prozent_treffer_in_filter = -1
-        else:
-            prozent_treffer_in_filter = round(len(np.intersect1d(y_thresh, y_target))/len(y_thresh)*10000)/100
-        plt.title(f"Anzahl: {len(x)}, Variabel: {aktive_prozent}%\nFilter trifft {prozent_korrekte_vorhersagen}% der Galaxien\nKorrekt in Filter: {prozent_treffer_in_filter}%")
-        plt.grid()
-        plt.show()
-        plt.close()
-        
+        corrData = pd.DataFrame(columns=["x","y","z"])
+        corrData["x"] = x
+        corrData["y"] = y
+        corrData["z"] = z
+
+        corrData = corrData[(corrData["x"] >= 0) & (corrData["y"] >= 0)]
+        corrData['z_x'] = (corrData['x'] - corrData['x'].mean()) / corrData['x'].std()
+        corrData['z_y'] = (corrData['y'] - corrData['y'].mean()) / corrData['y'].std()
+        threshold = 3
+        corrData = corrData[(corrData['z_x'].abs() < threshold) & (corrData['z_y'].abs() < threshold)]
+        corrData = corrData.drop(columns=['z_x', 'z_y'])
+
+        lenbefore = len(x)
+        x,y,z = corrData["x"], corrData["y"],corrData["z"]
+        lenafter = len(x)
+        geloscht = lenbefore - lenafter
+        corr = np.corrcoef(x, y)[0, 1]
+        if plot:
+            print(f"Correlation: {corr} - bereinigt um {geloscht} Datenpunkte")
+            if type(threshold_x) == type(4.20):
+                threshold_x = [threshold_x]
+            if type(threshold_y) == type(4.20):
+                threshold_y = [threshold_y]
+            for i in threshold_y:
+                plt.hlines(i,min(x),max(x)) # R
+            for i in threshold_x:
+                plt.vlines(i,min(y),max(y)) # F
+            plt.scatter(x,y,c = z,s = 50, edgecolor = "k", alpha = 0.5,zorder = 1)
+            plt.scatter(x_target,y_target,c = "red",s = 50, edgecolor = "k", alpha = 0.8,marker = 5,zorder = 2)
+            plt.scatter(x_thresh,y_thresh,c = "blue",s = 50, edgecolor = "k", alpha = 0.5,marker = 4,zorder = 1)
+
+            plt.colorbar(label=z_title)
+            plt.xlabel(x_title)
+            plt.ylabel(y_title)
+            if len(y_target)<1:
+                prozent_korrekte_vorhersagen = -1
+            else:
+                prozent_korrekte_vorhersagen = round(len(np.intersect1d(y_target, y_thresh))/len(y_target)*10000)/100
+            if len(y_thresh)<1:
+                prozent_treffer_in_filter = -1
+            else:
+                prozent_treffer_in_filter = round(len(np.intersect1d(y_thresh, y_target))/len(y_thresh)*10000)/100
+            plt.title(f"Anzahl: {len(x)}, Variabel: {aktive_prozent}%\nFilter trifft {prozent_korrekte_vorhersagen}% der Galaxien\nKorrekt in Filter: {prozent_treffer_in_filter}%\nCorrelation: {corr}")
+            plt.grid()
+            plt.show()
+            plt.close()
+        return corr,geloscht,len(x)
+
     def plot_curves(name):
         file2 = FileManager.load_data(name)
         file = BasicCalcs.normalize_null(file2)
@@ -466,7 +506,8 @@ class Plots:
         # except: tr_R = np.inf
         # try: tr_amplitude = round(amp_diff*100)/100
         # except: tr_amplitude = np.inf
-        redshift = galaxy_active.loc[galaxy_active["name"] == name, "redshift"].values[0]
+        print(name)
+        redshift = galaxy_active.loc[galaxy_active["name"] == name, "redshift"].values
         if redshift > 0.027:
             redshift = "Neu"
         else:
@@ -759,7 +800,6 @@ class FindActive:
             StartEndDiff = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=17) # StartEndDiff
             redshift = np.loadtxt(path1, delimiter=',', skiprows=1, usecols=18)  # redshift
             periodicFast = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=19,dtype=str)
-            print(f"Ding:{periodicFast}")
             periodicFast = np.array([float(ast.literal_eval(item)[0]) for item in periodicFast])
             #periodicFast = np.array(ast.literal_eval(periodicFast))[0]
             return name, F_var, R, F_and_R, cuts, amplitude,amp_diff, T, periodicpercent, Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift,periodicFast
@@ -1038,7 +1078,24 @@ if config["ReCalculate"] or config["ReCalculateOnlyNew"]:
 if config["Plots"]["ShowAllPlots"]: 
     Plots.show_plots()
 if config["Plots"]["ShowGroupPlot"]:
-    Plots.standart1()   
+    correlation = pd.DataFrame(columns=["xName","yName","correlation","removed","len"])
+
+    if config["Plots"]["ShowGroupPlotAll"] == False:
+        Plots.standart1()
+    else:
+        parameters = ["F_var", "R", "F_and_R", "cuts", "amplitude", "amp_diff", "T", "periodicpercent","Dt", "std", "up", "down", "mean", "peakA", "peakC", "lange", "StartEndDiff", "redshift", "periodicFast"]
+        for x in range(len(parameters)):
+            for y in range(x+1,len(parameters)):
+                corr,deleted,lange = Plots.standart1(x=parameters[x], y=parameters[y], plot=False)
+                new_row = pd.DataFrame([{"xName": parameters[x], "yName": parameters[y], "correlation": abs(corr), "removed": deleted,"len":lange}])
+                correlation = pd.concat([correlation,new_row], ignore_index=True)
+        correlation.sort_values(by=["correlation"], ascending=False, inplace=True)
+        correlation.reset_index(drop=True, inplace=True)
+        print(correlation)
+
+        for i in range(40):
+            Plots.standart1(correlation.iloc[i]["xName"],correlation.iloc[i]["yName"],plot=True)
+
 if config["Plots"]["ShowFourierPlot"]:
     console.print(groups)
     if show_galaxies != []:
@@ -1079,7 +1136,7 @@ if config["Plots"]["ShowClassifyPlot"] or config["Plots"]["sortedPlot"] or confi
     if config["Plots"]["ShowClassifyPlot"]:    
         console.print(df_sorted.to_string())
     if config["Plots"]["sortedPlot"]:
-        #df_sorted.to_csv("sortedcurves.csv")
+        df_sorted.to_csv("sortedcurves.csv")
         Plots.show_plots(df_sorted.index)
             
 if config["Plots"]["changeActivity"]:
@@ -1097,10 +1154,9 @@ if config["Plots"]["changeActivity"]:
    
    
 """
-
     TODO: beim speichern der finalen kurve leerzeichen entfernen
     TODO: redshift in finalen kurven speichern 
-    
+    TODO: group plot correlation für alle kombinationen durchrechnen lassen und dann ausgeben
 """
 
 

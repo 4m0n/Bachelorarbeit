@@ -2,17 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-F_treshold = 0.0025
-R_treshold = 1.2
-path_new = "activity_curves/new_active_galaxies.csv"
-path_old = "light_curves/active_galaxies.csv"
-path = path_new
 
 
-df = pd.read_csv('activity_curves/new_active_galaxies.csv', delimiter=",", usecols=lambda column: "Unnamed" not in column)
-df['length'] = df['name'].str.len()
-df.sort_values('length', ascending=True, inplace=True)
-print(df)
+a = [1,2,3,4,5,6,7,8,9,10]
+b = [4,5,6,7,8,92,10,11,12,13]
+
+print(np.corrcoef(a,b),np.corrcoef(a,b)[0,1])
+
+
 if False: #normieren der bedingun
     daten = np.loadtxt("light_curves/active_galaxies_normiert.csv", delimiter=',', skiprows=1, usecols=-1)
     normiert = np.loadtxt(path, delimiter=',', skiprows=1, usecols=-1)

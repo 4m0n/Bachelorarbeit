@@ -31,12 +31,11 @@ install()
 console = Console()
 
 
-
 global Counter1
 Counter1 = pd.DataFrame(columns=["Name","Value"])
 
 def fit_func_sin(x, a, b, c, d):
-    return a * np.sin(b * x + c) + d 
+    return a * np.sin(b * x + c) + d
 
 def fit(x, y):
     amplitude_guess = np.std(y) * 2**0.5
@@ -44,7 +43,7 @@ def fit(x, y):
     phase_guess = 0
     offset_guess = np.mean(y)
     p0 = [amplitude_guess, frequency_guess, phase_guess, offset_guess]
-    
+
     params, params_covariance = optimize.curve_fit(fit_func_sin, x, y, p0=p0, maxfev=100000)
     return params
 
@@ -248,7 +247,7 @@ Galaxies = [f[:-4] for f in os.listdir("final_light_curves")]
 Galaxies = ["PKS2158-380"]
 Galaxies = config["ExampleGalaxies"]["periodic"]
 
-if True:
+if False:
     for val in tqdm(Galaxies):
         t,t2,y,timerange = genereatePoints()
         t,y = loadCurve(val)

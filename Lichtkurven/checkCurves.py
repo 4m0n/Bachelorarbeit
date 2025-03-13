@@ -420,10 +420,23 @@ class Plots:
         return 0        
         
 if True:
+    # Fragezeichen entfernen
+    directory = "final_light_curves/"
+    for filename in os.listdir(directory):
+        new_filename = filename.replace("?", "")
+        if new_filename != filename:
+            os.rename(os.path.join(directory, filename), os.path.join(directory, new_filename))
+            print(f'Renamed: {filename} -> {new_filename}')
+
+    activegal = pd.read_csv("new_active_galaxies.csv")
+    activegal["name"] = activegal["name"].str.replace("?", "", regex=False)
+    activegal.to_csv("new_active_galaxies.csv", index=False)
 
     liste = listdir("final_light_curves")
     df_sorted = pd.read_csv("sortedcurves.csv")
-
+    df_sorted["name"].replace("?", "", inplace=True)
+    df_sorted["name"] = df_sorted["name"].str.replace("?", "", regex=False)
+    df_sorted.to_csv("sortedcurves.csv", index=False)
     galaxienotes = pd.DataFrame({
         'name': df_sorted['name'],
         "category": [-1] * len(df_sorted),
@@ -434,7 +447,13 @@ if True:
     if not os.path.exists("galaxienotes.csv"):
         # DataFrame in die Datei schreiben
         galaxienotes.to_csv("galaxienotes.csv", index=False)
-    data = pd.read_csv("galaxienotes.csv")    
+    data = pd.read_csv("galaxienotes.csv")
+    # df erweitern um unbekannte einträge
+    existing_names = set(data['name'])
+    unique_notes = galaxienotes[~galaxienotes['name'].isin(existing_names)]
+    data = pd.concat([data, unique_notes], ignore_index=True)
+
+
     if data.shape[1] == 3:
         # Eine dritte Spalte mit -1 hinzufügen
         data['category'] = -1
@@ -444,7 +463,7 @@ if True:
         data.to_csv("galaxienotes.csv", index=False)
     
     # sort galaxienotes for name
-    data = pd.read_csv("galaxienotes.csv")
+    #data = pd.read_csv("galaxienotes.csv")
     data["fullname"] = ""
     for i in range(len(data)):
         newname = str(data["newname"].iloc[i])
@@ -462,18 +481,16 @@ if True:
             data.loc[i, "fullname"] = name
             
     #data["fullname"] = f'{data["prefix"]}-{data["newname"]}'
-    print(f"dada: {data}")
     data['fullname'] = data['fullname'].fillna(data['name'])
-    
-    
-    data["fullname"] = data["fullname"].replace(" ","", inplace=True)
+
+    #data["fullname"].replace(" ","", inplace=True)
+    data["fullname"] = data["fullname"].str.replace(" ", "", regex=False)
     data["fullname"] = data["fullname"].str.lower()
     data.sort_values(by = "fullname", ascending=True, inplace = True)
-    
+
     data.drop(columns = ["fullname"], inplace = True)
     data.to_csv("galaxienotes.csv", index=False)
 
-    
             
         
         
