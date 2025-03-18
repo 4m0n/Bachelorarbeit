@@ -38,6 +38,11 @@ class FileManager:
         else: cuts = -1
         return cuts
 class BasicCalcs:
+    def Datetime_in_Unix(date):
+        unix = []
+        for i in date:
+            unix.append(i.timestamp())
+        return unix
     def normalize_null(file):
         curve = file.copy()
         curve[value] = curve[value] - curve[value].min() 
@@ -76,18 +81,43 @@ class BasicCalcs:
         data.sort_values(by = "fullname", ascending=True, inplace = True)
         
         string = ""
+        string2 = []
         for i in index_list:
             if i == -1:
                 string += f"==== Ohne Kat. ====\n"
+                string2.append("==== Ohne Kat. ====")
             else:
                 string += f"==== Kat: {i} ====\n"
+                string2.append(f"==== Kat: {i} ====")
             filtered_data = data[data["category"] == i]
             # Hinzufügen der 'fullname'-Werte zur Zeichenkette
             for fullname in filtered_data["fullname"].values:
                 string += f"{fullname}\n"
-                
+                string2.append(fullname)
+        #string2 = np.array(string2)
+        maxlen = len(max(string2, key=len))
+        breite = 3
+
+        dim2 = len(string2)%breite
+        dim2=breite - dim2
+
+
+        for i in range(dim2):
+            string2.append(" ")
+        for i in range(len(string2)):
+            diff = maxlen-len(string2[i])
+            string2[i] = string2[i] + " "*diff
+
+
+        dim2 = len(string2)/breite
+        string2 = np.array(string2)
+
+        string2 = string2.reshape(breite,int(dim2)).T
+        text = "\n".join([" ".join(row) for row in string2])
+
+        text = text.replace("][", "\n ")
         with open("Galaxie_Liste.csv", "w") as file:
-            file.write(string)
+            file.write(text)
            
 class Plots:
     def show_plots(sortname = pd.DataFrame(),skip = "None", cat = 0):
@@ -349,6 +379,16 @@ class Plots:
         def submit_exit(event):
             submit(event)
             exit()
+
+        def speichern(event):
+            x = np.concatenate((x_1, x_2))
+            y = np.concatenate((y_1, y_2))
+            x = x.astype('datetime64[s]').astype('O')
+            x = BasicCalcs.Datetime_in_Unix(x)
+            speicherdata = pd.DataFrame({'time': x, 'flux': y})
+            speicherdata.to_csv(f'{name}_liste.csv', index=False)
+            print(f"\ngespeichert als: {name}_liste.csv\n")
+
         gnotes = pd.read_csv("galaxienotes.csv")
         notes = str(gnotes.loc[gnotes['name'] == name, "notes"].values[0])
         category = str(gnotes.loc[gnotes['name'] == name, "category"].values[0])
@@ -378,10 +418,13 @@ class Plots:
 
         axbox22 = fig.add_axes([0.12, 0.00, 0.4, 0.05])
         y2_textbox = TextBox(axbox22, f"Name:", initial = newname)
-        
-        axbox3 = fig.add_axes([0.71, 0.05, 0.1, 0.075])
+
+        axboxprint = fig.add_axes([0.63, 0.05, 0.08, 0.075])
+        print_button = Button(axboxprint, "print")
+
+        axbox3 = fig.add_axes([0.73, 0.05, 0.08, 0.075])
         submit_button = Button(axbox3, "Save")
-        
+
         axbox33 = fig.add_axes([0.82, 0.05, 0.08, 0.075])
         submit_button2 = Button(axbox33, "Next")        
                 
@@ -391,7 +434,7 @@ class Plots:
         submit_button.on_clicked(submit)
         submit_button2.on_clicked(next)
         exit_button.on_clicked(submit_exit)
-
+        print_button.on_clicked(speichern)
         def titleName(name,liste2, prefix, newname):
             name2 = name
             if newname != "":
@@ -545,3 +588,4 @@ if True:
         print("\n\n Falscher Input, Neustarten...\n\n")
         exit()
         
+# CGCG 49-155 = SDSS J15242+0451
