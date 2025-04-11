@@ -15,6 +15,8 @@ import scipy.signal as signal
 from astropy.timeseries import LombScargle
 from scipy.interpolate import UnivariateSpline
 import ast
+import seaborn as sns
+from matplotlib.colors import LogNorm, Normalize
 
 
 from rich import print
@@ -71,7 +73,7 @@ class Conditions:
                 formatted_value = value
             formatted_results.append((boolean, formatted_value))
         return formatted_results
-    def __init__(self,R=0,F=0,amp_diff=0,T=0,Dt = 5e8,std = 0,up = 0,down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0,StartEndDiff = 0, redshift = -1,periodicFast = 0 , classify = False):
+    def __init__(self,R=0,F=0,amp_diff=0,T=0,Dt = 5e8,std = 0,up = 0,down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0,StartEndDiff = 0, redshift = -1,periodicFast = 0, magnitude = 0, classify = False):
         self.R = R
         self.F = F
         self.amp_diff = amp_diff
@@ -89,7 +91,8 @@ class Conditions:
         self.classify = classify
         self.redshift = redshift
         self.periodicFast = periodicFast
-    def main(self,*, R=0,F=0,amp_diff=0,T=0,Dt = 5e8, std = 0, up = 0, down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0, StartEndDiff = 0, redshift = -1,periodicFast = 0, classify = False):
+        self.magnitude = magnitude
+    def main(self,*, R=0,F=0,amp_diff=0,T=0,Dt = 5e8, std = 0, up = 0, down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0, StartEndDiff = 0, redshift = -1,periodicFast = 0, magnitude = 0, classify = False):
         self.R = R
         self.F = F
         self.amp_diff = amp_diff
@@ -107,6 +110,7 @@ class Conditions:
         self.classify = classify
         self.redshift = redshift
         self.periodicFast = periodicFast
+        self.magnitude = magnitude
         if classify == False:
             return Conditions.periodicFast(self) and Conditions.minPoints(self) and not Conditions.supernova(self)
             #return Conditions.F_var_R(self)[0] and Conditions.minPoints(self) #(Conditions.periodic(self) or Conditions.linear(self)) and Conditions.minPoints(self) #and Conditions.minPoints(self)
@@ -287,7 +291,7 @@ class Plots:
         
     def standart1(x=None,y=None,z=None,plot = True):
 
-        name, F_var, R, F_and_R, cuts, amplitude, amp_diff, T, periodicpercent,Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift, periodicFast = FindActive.load_parameters(variante=1)
+        name, F_var, R, F_and_R, cuts, amplitude, amp_diff, T, periodicpercent,Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift, periodicFast,magnitude = FindActive.load_parameters(variante=1)
         if x == None:
             x = "F_var"
         if y == None:
@@ -374,7 +378,10 @@ class Plots:
                     x = periodicFast
                     x_title = "periodicFast"
                     threshold_x = 0.1
-
+                case "magnitude":
+                    x = magnitude
+                    x_title = "magnitude"
+                    threshold_x = 0.1
             return x, x_title, threshold_x
         
         x, x_title, threshold_x = setup(x)
@@ -405,32 +412,48 @@ class Plots:
         corrData["x"] = x
         corrData["y"] = y
         corrData["z"] = z
-
-        corrData = corrData[(corrData["x"] >= 0) & (corrData["y"] >= 0)]
+        # cuts repräsentieren je
+        if x_title == "magnitude":
+            corrData["x"] = abs(corrData["x"])
+        if y_title == "magnitude":
+            corrData["y"] = abs(corrData["y"])
+        if x_title == "cuts":
+            corrData = corrData[(corrData["x"] >= 0) & (corrData["y"] >= 0)]
+        elif y_title == "cuts":
+            corrData = corrData[(corrData["x"] >= 0) & (corrData["y"] >= 0)]
+        else:
+            corrData = corrData[(corrData["x"] > 0) & (corrData["y"] > 0)]
         corrData['z_x'] = (corrData['x'] - corrData['x'].mean()) / corrData['x'].std()
         corrData['z_y'] = (corrData['y'] - corrData['y'].mean()) / corrData['y'].std()
         threshold = 3
+        # Ausreisser entfernen für zuverlässigere Ergebnisse
         corrData = corrData[(corrData['z_x'].abs() < threshold) & (corrData['z_y'].abs() < threshold)]
         corrData = corrData.drop(columns=['z_x', 'z_y'])
-
         lenbefore = len(x)
         x,y,z = corrData["x"], corrData["y"],corrData["z"]
         lenafter = len(x)
         geloscht = lenbefore - lenafter
         corr = np.corrcoef(x, y)[0, 1]
+
         if plot:
+            if x_title == "magnitude":
+                x*=-1
+            if y_title == "magnitude":
+                y*=-1
             print(f"Correlation: {corr} - bereinigt um {geloscht} Datenpunkte")
             if type(threshold_x) == type(4.20):
                 threshold_x = [threshold_x]
             if type(threshold_y) == type(4.20):
                 threshold_y = [threshold_y]
             for i in threshold_y:
+                continue
                 plt.hlines(i,min(x),max(x)) # R
             for i in threshold_x:
+                continue
                 plt.vlines(i,min(y),max(y)) # F
             plt.scatter(x,y,c = z,s = 50, edgecolor = "k", alpha = 0.5,zorder = 1)
-            plt.scatter(x_target,y_target,c = "red",s = 50, edgecolor = "k", alpha = 0.8,marker = 5,zorder = 2)
-            plt.scatter(x_thresh,y_thresh,c = "blue",s = 50, edgecolor = "k", alpha = 0.5,marker = 4,zorder = 1)
+            #plt.scatter(x_target,y_target,c = "red",s = 50, edgecolor = "k", alpha = 0.8,marker = 5,zorder = 2)
+            #plt.scatter(x_thresh,y_thresh,c = "blue",s = 50, edgecolor = "k", alpha = 0.5,marker = 4,zorder = 1)
 
             plt.colorbar(label=z_title)
             plt.xlabel(x_title)
@@ -450,6 +473,7 @@ class Plots:
         return corr,geloscht,len(x)
 
     def plot_curves(name):
+
         file2 = FileManager.load_data(name)
         file = BasicCalcs.normalize_null(file2)
         x, y, cam = file.index.copy(), file[value].copy(), file["Camera"].copy()
@@ -612,11 +636,12 @@ class FileManager:
         StartEndDiff = FindActive.changingActivity(name)
         redshift = FileManager.loadRedshift(name)
         periodicFast = FindActive.FourierFastPeriodic(name)
+        magnitude = FindActive.absoluteMag(name)
         if os.path.isfile(file_path) == False:
             with open(file_path, 'w') as datei:
-                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast\n")
+                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast,magnitude\n")
         with open(file_path, 'a') as datei:
-            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{periodicpercent},{deltaT.days},{std},{up},{down},{mean},{peakA},{peakC},{lange},{StartEndDiff},{redshift},{periodicFast}\n")
+            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{periodicpercent},{deltaT.days},{std},{up},{down},{mean},{peakA},{peakC},{lange},{StartEndDiff},{redshift},{periodicFast},{magnitude}\n")
         return
     
     
@@ -718,6 +743,19 @@ class BasicCalcs:
         return datetime
 
 class FindActive:
+    def absoluteMag(name):
+        name = name.replace(" ","").lower()
+        galaxy_active = pd.read_csv("pyasassn_tool/mainTargets.csv",delimiter="|")
+        galaxy_active["namecheck"] = galaxy_active["name             "].str.lstrip().str.lower().str.replace(" ", "")
+        try:
+            mag = galaxy_active.loc[galaxy_active["namecheck"] == name, "abs_mag"].values[0]
+            if type(mag) == str:
+                mag = float(mag.replace(" ",""))
+        except:
+            mag = 0
+
+        return mag
+
     def changingActivity(name,plot=False):
         curve = FileManager.load_data(name)
         curve = BasicCalcs.normalize_null(curve)
@@ -763,20 +801,21 @@ class FindActive:
             StartEndDiff = galaxy_active.loc[galaxy_active["name"] == name, "StartEndDiff"].values[0]
             redshift = galaxy_active.loc[galaxy_active["name"] == name, "redshift"].values[0]
             periodicFast = galaxy_active.loc[galaxy_active["name"] == name, "periodicFast"].values[0]
+            magnitude = float(galaxy_active.loc[galaxy_active["name"] == name, "magnitude"].values[0])
             # liste umwandeln
             periodicFast = np.array(ast.literal_eval(periodicFast))[0]
             ehm = {
                 "R": R, "F": F, "amp_diff": amp_diff, "T": T, "Dt": Dt,
                 "std": std, "up": up, "down": down, "mean": mean,
                 "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent,"StartEndDiff":StartEndDiff, "redshift":redshift,
-                "periodicFast":periodicFast
+                "periodicFast":periodicFast,"magnitude":magnitude
             }
             
             return {
                 "R": R, "F": F, "amp_diff": amp_diff, "T": T, "Dt": Dt,
                 "std": std, "up": up, "down": down, "mean": mean,
                 "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent,"StartEndDiff":StartEndDiff, "redshift":redshift,
-                "periodicFast":periodicFast
+                "periodicFast":periodicFast,"magnitude":magnitude
             }
         elif variante == 1:
             path1 = path+"new_active_galaxies.csv"
@@ -801,8 +840,9 @@ class FindActive:
             redshift = np.loadtxt(path1, delimiter=',', skiprows=1, usecols=18)  # redshift
             periodicFast = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=19,dtype=str)
             periodicFast = np.array([float(ast.literal_eval(item)[0]) for item in periodicFast])
+            magnitude = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=20,dtype=float)
             #periodicFast = np.array(ast.literal_eval(periodicFast))[0]
-            return name, F_var, R, F_and_R, cuts, amplitude,amp_diff, T, periodicpercent, Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift,periodicFast
+            return name, F_var, R, F_and_R, cuts, amplitude,amp_diff, T, periodicpercent, Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift,periodicFast,magnitude
             
             
     def FourierLombScargle(name,plot = False):
@@ -898,7 +938,7 @@ class FindActive:
         file2 = curve.copy()
         #print(f"Max: {file2[value].max()} Min: {file2[value].min()}, Zsm: {file2[value].max() / file2[value].min()}")
         if file2[value].max() / file2[value].min() <= 0:
-            console.log(f"\nALARM {file2[value].max() / file2[value].min()}\n")
+            console.log(f"\nALARM {name}  -  {file2[value].max() / file2[value].min()}\n")
         return file2[value].max() / file2[value].min()
     
     def fractional_variation(name):
@@ -1054,7 +1094,7 @@ class FindActive:
 def start():
     if not config["ReCalculateOnlyNew"] or not os.path.exists(path+"new_active_galaxies.csv"):
         with open(path+"new_active_galaxies.csv", 'w') as datei:
-            datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast\n")
+            datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast,magnitude\n")
     galaxy_active = pd.read_csv(path+"new_active_galaxies.csv") # wurden bereits berechnet
     files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
     show_galaxies_lower = [item.replace(" ","").lower()for item in show_galaxies]
@@ -1078,23 +1118,41 @@ if config["ReCalculate"] or config["ReCalculateOnlyNew"]:
 if config["Plots"]["ShowAllPlots"]: 
     Plots.show_plots()
 if config["Plots"]["ShowGroupPlot"]:
-    correlation = pd.DataFrame(columns=["xName","yName","correlation","removed","len"])
+    correlation = pd.DataFrame(columns=["xName","yName","correlation","removed","len","delete"])
 
     if config["Plots"]["ShowGroupPlotAll"] == False:
         Plots.standart1()
     else:
-        parameters = ["F_var", "R", "F_and_R", "cuts", "amplitude", "amp_diff", "T", "periodicpercent","Dt", "std", "up", "down", "mean", "peakA", "peakC", "lange", "StartEndDiff", "redshift", "periodicFast"]
+        parameters = ["F_var", "R", "F_and_R", "cuts", "amplitude", "amp_diff", "T", "periodicpercent","Dt", "std", "up", "down", "mean", "peakA", "peakC", "lange", "StartEndDiff", "redshift", "periodicFast","magnitude"]
         for x in range(len(parameters)):
             for y in range(x+1,len(parameters)):
                 corr,deleted,lange = Plots.standart1(x=parameters[x], y=parameters[y], plot=False)
-                new_row = pd.DataFrame([{"xName": parameters[x], "yName": parameters[y], "correlation": abs(corr), "removed": deleted,"len":lange}])
+                new_row = pd.DataFrame([{"xName": parameters[x], "yName": parameters[y], "correlation": abs(corr), "removed": deleted,"len":lange,"delete":False}])
                 correlation = pd.concat([correlation,new_row], ignore_index=True)
+                new_row = pd.DataFrame([{"xName": parameters[y], "yName": parameters[x], "correlation": abs(corr), "removed": deleted,"len":lange,"delete":True}])
+                correlation = pd.concat([correlation,new_row], ignore_index=True)
+            corr, deleted, lange = Plots.standart1(x=parameters[x], y=parameters[x], plot=False)
+            new_row = pd.DataFrame([{"xName": parameters[x], "yName": parameters[x], "correlation": abs(corr),"removed": deleted, "len": lange,"delete":True}])
+            correlation = pd.concat([correlation, new_row], ignore_index=True)
         correlation.sort_values(by=["correlation"], ascending=False, inplace=True)
         correlation.reset_index(drop=True, inplace=True)
-        print(correlation)
 
+        correlation = correlation[correlation["removed"] < 500]
+
+        heatmap_data = correlation.pivot(index="xName",columns="yName",values="correlation")
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(heatmap_data, annot=True, cmap='Blues', linewidths=.5, linecolor='black', cbar_kws={'label': 'Correlation'})
+        plt.title('Heatmap of Values', fontsize=18)
+        plt.xlabel('X Name', fontsize=14)
+        plt.ylabel('Y Name', fontsize=14)
+        plt.xticks(rotation=45, ha='right', fontsize=12)
+        plt.yticks(rotation=0, fontsize=12)
+        plt.show()
+        plt.close()
+        correlation = correlation[correlation["delete"] == False]
         for i in range(40):
-            Plots.standart1(correlation.iloc[i]["xName"],correlation.iloc[i]["yName"],plot=True)
+            if correlation.iloc[i]["yName"] == "magnitude":
+                Plots.standart1(correlation.iloc[i]["xName"],correlation.iloc[i]["yName"],plot=True)
 
 if config["Plots"]["ShowFourierPlot"]:
     console.print(groups)
@@ -1154,14 +1212,12 @@ if config["Plots"]["changeActivity"]:
    
    
 """
-    TODO: beim speichern der finalen kurve leerzeichen entfernen
-    TODO: redshift in finalen kurven speichern 
     TODO: group plot correlation für alle kombinationen durchrechnen lassen und dann ausgeben
+    TODO: SDSSJ15242 sollte langzeit periodisch sein
+    TODO: langsame periode soll abgeschnitten werden und dann in fast übergehen
+    
+    TODO: fehlen von kategorien anzeigen yes
+    TODO: abs magnitude runterladen
 """
 
 
-
-# NGC 676, NGC 1275, NGC 3516,NGC 5273,NGC 4253,NGC 5548,Mrk 1044
-
-#PG 1149-110
-#NGC 4235

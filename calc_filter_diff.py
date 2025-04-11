@@ -521,30 +521,34 @@ def shift_cam_and_filters(file,cuts = config["Cutter"]):
         fit_curve = file[file["Camera"] == cameras[i]].copy()
         # Check ob es größere Lücken oder Sprünge gibt -> Dann Lichtkurve weiter unterteilen # ! Wenn ein Cluster stark verschoben ist -> wird als seperate Kurve behandelt
         if cuts:
-            fit_curve.reset_index(drop=True, inplace=True)
             fit_curve.sort_values(by='JD', inplace=True)
+            fit_curve.reset_index(drop=True, inplace=True)
             global plot_cuts
-            curve_splitter = pd.DataFrame(columns=["cut", "mean", "std"], dtype='float')   
+            #curve_splitter = pd.DataFrame(columns=["cut", "mean", "std","timediff"], dtype='float')
+            curve_splitter = pd.DataFrame({
+                "cut": pd.Series(dtype='int64'),
+                "mean": pd.Series(dtype='float'),
+                "std": pd.Series(dtype='float'),
+                "timediff": pd.Series(dtype='timedelta64[ns]')
+            })
             curve_splitter = curve_splitter.astype({'cut': 'int64'})         
             start = 0
             # ==== Bedingung 1 
-            for i in range(len(fit_curve["JD"])-1):
-                if (fit_curve["JD"][i+1] - fit_curve["JD"][i] > pd.Timedelta(days=30)) or (abs(fit_curve[value][i+1] - fit_curve[value][i]) > fit_curve[value].std()): # Maximale Lückengröße
-                    if len(fit_curve[value][start:i]) <2: #! entfernen? (wenn in einem einzelnen Zeitraum weniger als 2 Werte vorhanden sind)
-                        start = i+1
+            for k in range(len(fit_curve["JD"])-1):
+                if (fit_curve.iloc[k+1]["JD"] - fit_curve.iloc[k]["JD"] > pd.Timedelta(days=30)) or (abs(fit_curve.iloc[k+1][value] - fit_curve.iloc[k][value]) > fit_curve[value].std()): # Maximale Lückengröße
+                    if len(fit_curve[value][start:k]) <2: #! entfernen? (wenn in einem einzelnen Zeitraum weniger als 2 Werte vorhanden sind)
+                        start = k+1
                         continue
-                    curve_splitter = pd.concat([curve_splitter, pd.DataFrame([{"cut":i,"mean":fit_curve[value][start:i].mean(),"std":fit_curve[value][start:i].std()}])], ignore_index=True)                
-                    start = i+1
+                    curve_splitter = pd.concat([curve_splitter, pd.DataFrame([{"cut":k,"mean":fit_curve[value][start:k].mean(),"std":fit_curve[value][start:k].std(),"timediff":fit_curve.iloc[k+1]["JD"] - fit_curve.iloc[k]["JD"]}])], ignore_index=True)
+                    start = k+1
             # ==== Bedingung 2
             # avg_days = 4
             # for i in range(avg_days,len(fit_curve["JD"])-avg_days - 1):  
             #     mean = fit_curve[value][i-avg_days:i].mean()
             #     if abs(mean - fit_curve[value][i+1:i+1+avg_days].mean()) > (fit_curve[value][i-avg_days:i].std() - fit_curve[value][i+1:i+1+avg_days].std()).mean():
             #         for k in range(i,len(fit_curve["JD"])):
-                        
 
 
-                
             # ================
                                         
             mean_std = curve_splitter["std"].mean()
@@ -576,15 +580,15 @@ def shift_cam_and_filters(file,cuts = config["Cutter"]):
                 except:
                     return 0
                 return m
-
-                
                 
             for i in range(1,len(curve_splitter["cut"])):
-                # ==== Bedingung 1 
+                # ==== Bedingung 1
                 m =  abs(steigung(fit_curve.loc[curve_splitter['cut'][i-1]:curve_splitter['cut'][i]])) < 0.5
                 bedingung = (curve_splitter["std"][i-1] < mean_std*2) and (curve_splitter["std"][i] < mean_std*1.5) and ((curve_splitter["mean"][i] > curve_splitter["mean"][i-1]*1.1) or (curve_splitter["mean"][i] < curve_splitter["mean"][i-1]*0.9))
-                if m and bedingung: 
-                    new_curves = pd.concat([new_curves, pd.DataFrame([{"cut_start":curve_splitter["cut"][i-1]}])], ignore_index=True)
+                #bedingung 2 für große abstände + großen sprung
+                bedingung2 = (curve_splitter["timediff"][i-1] > pd.Timedelta(days=60) and (abs(curve_splitter["mean"][i] / curve_splitter["mean"][i - 1]) > 2 or abs(curve_splitter["mean"][i] / curve_splitter["mean"][i - 1]) < 0.5))
+                if (m and bedingung) or bedingung2:
+                    new_curves = pd.concat([new_curves, pd.DataFrame([{"cut_start":curve_splitter["cut"][i-1]+1}])], ignore_index=True)
 
                     if len(plot_cuts["cam"]) == 0:
                         plot_cuts = pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])
@@ -592,7 +596,7 @@ def shift_cam_and_filters(file,cuts = config["Cutter"]):
                         plot_cuts = pd.concat([plot_cuts, pd.DataFrame([{"start":fit_curve.loc[curve_splitter["cut"][i-1]+1,"JD"],"cam":fit_curve.loc[curve_splitter["cut"][i],"Camera"],"shift":curve_splitter["mean"][i] - curve_splitter["mean"][i-1]}])], ignore_index=True)
                 # ==== Bedingung 2
                 #console.print(f"Steigung: {steigung(fit_curve.loc[curve_splitter['cut'][i-1]:curve_splitter['cut'][i]])}")
-                    
+
                 # =================
                 
                 
@@ -703,7 +707,7 @@ def visualize1(file):
 
     # Kamera farben
     farben = [
-    "blue", "black", "cyan", "magenta", "yellow", "black", "white", "orange", 
+    "blue", "black", "cyan", "magenta", "red", "black", "white", "orange",
     "purple", "brown", "pink", "gray", "olive", "darkblue", "lime", "indigo", 
     "gold", "darkgreen", "teal", "black", "cyan", "magenta", "yellow", "black", "white", "orange", 
     "purple", "brown", "pink", "gray", "olive", "darkblue", "lime", "indigo", 
@@ -857,6 +861,8 @@ def start():
 
         if f != "light_curves/661431822098-light-curves.csv" and f != "light_curves/661431908458-light-curves.csv" and f != "light_curves/42949788551-light-curves.csv": # fitler for specific galaxy
             #continue
+            pass
+        if f != "light_curves/661431908458-light-curves.csv":
             pass
         if f == "light_curves/name_id.csv" or f == "light_curves/.DS_Store"or f == path+"active_galaxies.csv":
             continue

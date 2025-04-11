@@ -3,11 +3,33 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
+curve = pd.read_csv("light_curves/661430607288-light-curves(1).csv")
 
-a = [1,2,3,4,5,6,7,8,9,10]
-b = [4,5,6,7,8,92,10,11,12,13]
+#plt.scatter(curve["Flux"],curve["Mag"])
+#plt.show()
+fluss = 728
+print(f"Fluss: {fluss}, Mag:{2.5 * np.log10(fluss)}")
 
-print(np.corrcoef(a,b),np.corrcoef(a,b)[0,1])
+exit()
+def load(filepath):
+    with open(filepath, 'r') as file:
+        # Suche die Zeile, die mit "JD" beginnt
+        for i, line in enumerate(file):
+            if line.startswith("JD"):
+                start_line = i
+                break
+
+    # Lies die Datei ab der gefundenen Zeile ein
+    df = pd.read_csv(filepath, skiprows=range(start_line))
+    return df
+
+data = load("light_curves/661431908458-light-curves.csv")
+#data["JD"] = pd.to_datetime(data['JD'], origin='julian', unit='D')
+
+print(data["JD"],"\n\n",data["Flux"])
+
+plt.scatter(data["JD"],data["Flux"])
+plt.show()
 
 
 if False: #normieren der bedingun

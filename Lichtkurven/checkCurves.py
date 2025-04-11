@@ -8,6 +8,8 @@ import matplotlib
 import numpy as np
 from prompt_toolkit import prompt
 from matplotlib.widgets import TextBox, Button
+import datetime
+from astropy.time import Time
 
 load_path = "final_light_curves/"
 active_path = "activity_curves/"
@@ -116,7 +118,7 @@ class BasicCalcs:
         text = "\n".join([" ".join(row) for row in string2])
 
         text = text.replace("][", "\n ")
-        with open("Galaxie_Liste.csv", "w") as file:
+        with open("Galaxie_Liste.txt", "w") as file:
             file.write(text)
            
 class Plots:
@@ -129,9 +131,9 @@ class Plots:
             files = sorted_names
             # alphabetisch sortieren
             files = [f for f in files if f in (sortname.values).tolist()]
-            
+
         files.sort()
-        
+
         # nach neuem Namen sortieren
         order = pd.read_csv("galaxienotes.csv")
         order = order[order["name"].isin(files)]
@@ -140,7 +142,7 @@ class Plots:
             newname = str(order["newname"].iloc[i])
             prefix = str(order["prefix"].iloc[i])
             name = str(order["name"].iloc[i])
-            
+
             if len(newname) > 1 and newname != "nan":
                 if len(prefix) > 1 and prefix != "nan":
                     order.loc[i, "fullname"] = f'{prefix}-{newname}'
@@ -154,10 +156,10 @@ class Plots:
         order['fullname'] = order['fullname'].fillna(order['name'])
         order["fullname"] = order["fullname"].replace(" ","")
         order["fullname"] = order["fullname"].str.lower()
+        order.dropna(subset = ["name"], inplace = True)
         order.sort_values(by = "fullname", ascending=True, inplace = True)
-
         files = order["name"].values.tolist()
-        
+
         if cat > 0:
             order = pd.read_csv("new_active_galaxies.csv")
             order = order[order["name"].isin(files)]
@@ -165,12 +167,11 @@ class Plots:
             files = order["name"].values.tolist()
             files2 = []
             for val in files:
-                files2.append(val+".csv")
+                files2.append(str(val)+".csv")
         s = True
         
         
         #print("\n\nSortierung")
-    
         for file in files:
             if skip != "None":
                 if file == skip:
@@ -178,12 +179,14 @@ class Plots:
                 if s: continue
             name = file.replace(" ","")
             #print(f"Name: {order.loc[order['name'] == name, 'name'].values[0]} Wert: {order.loc[order['name'] == name, 'activity'].values[0]}")
+            #Plots.plot_curves(file)
             Plots.plot_curves(file)
     
     def plot_curves2(name):
-
+        print(f"name : {name}")
         file2 = FileManager.load_data(name)
-        file = BasicCalcs.normalize_null(file2)
+        #file = BasicCalcs.normalize_null(file2)
+        file = file2.copy()
         x, y, cam = file.index.copy(), file[value].copy(), file["Camera"].copy()
         file2 = BasicCalcs.rolling_mid(file,"30D")
         x1, y1 = file2.index.copy(), file2[value].copy()
@@ -202,12 +205,17 @@ class Plots:
             "orchid", "plum", "slateblue", "turquoise", "violet", "darkcyan", 
             "darkorchid", "mediumorchid"
         ]
+        # farben = ["black","black","black","black","black","black","black",
+        #           "black","black","black","black","black","black","black",
+        #           "black","black","black","black","black","black","black",
+        #           "black","black","black","black","black","black","black",
+        #           "black","black","black","black","black","black","black"]
         
         cameras = cam.unique()  
         c2 = []
         for i in cam:
             c2.append(farben[np.where(cameras == i)[0][0]])
-            
+        print("jo3")
         c3 = []
         c4 = []
         for index, i in enumerate(cam):
@@ -229,7 +237,7 @@ class Plots:
             return value
 
         # Anwenden der Funktion auf alle Zellen
-        
+        print("jo1")
         def remove_numbers(value):
             if isinstance(value, str):  # Prüfen, ob der Wert ein String ist
                 if value[0] == "(":
@@ -242,39 +250,39 @@ class Plots:
         # Durch jede Zelle des DataFrames iterieren
         for row in range(liste.shape[0]):  # Zeilenweise
             for col in range(liste.shape[1]):  # Spaltenweise
-                liste2.iloc[row, col] = remove_numbers(liste.iloc[row, col])
-        
+                #liste2.iloc[row, col] = remove_numbers(liste.iloc[row, col])
+                pass
         
         liste2 = liste2.drop(columns = ["True_Count"])
+        plt.title(f"NGC 4593",fontsize = 22)
 
-        plt.title(f"Galaxy: {name}\n{liste2.loc[liste2['name'] == name, liste2.columns != 'name'].to_string(index=False)}")
+        #plt.plot(x1,y1,zorder=10, label="30 Tage", color = "red")
+        size = 24
+        plt.scatter(x_1,y_1,c = c3, alpha=0.4, zorder=5, marker = "o",s = size) # plot verschobene orginalpunkte
+        plt.scatter(x_2,y_2,c = c4, alpha=0.4, zorder=5, marker = "o",s = size) # plot verschobene orginalpunkte
 
-        plt.plot(x1,y1,zorder=10, label="30 Tage", color = "red")
-        plt.scatter(x_1,y_1,c = c3, alpha=0.4, zorder=5, marker = "x") # plot verschobene orginalpunkte
-        plt.scatter(x_2,y_2,c = c4, alpha=0.4, zorder=5, marker = "o") # plot verschobene orginalpunkte
-  
         
         plt.grid(color='grey', linestyle='--', linewidth=0.5)
-        plt.xlabel("Zeit", fontsize=12)
-        plt.ylabel("Fluss (normiert auf 1)", fontsize=12)
+        plt.xlabel("Time [years]", fontsize=18)
+        plt.ylabel("Flux [mJy]", fontsize=18)
         plt.legend(fontsize=10, frameon=True, fancybox=True, framealpha=0.7)
         plt.tight_layout()
         plt.show()
-        plt.close()
-        
+
     def plot_curves(name):
     
         file = FileManager.load_data(name)
         
         if False:
             # Normal Fluss
-            file = BasicCalcs.normalize_null(file2)
-            file[value] = -file[value]
+            file = BasicCalcs.normalize_null(file)
+#            file[value] = -file[value]
         else:
             # Relative Mag
+            file[value] = 2.5 * np.log10(file[value])
+            file = BasicCalcs.normalize_null(file)
             file[value] = file[value]/min(file[value])
             a = file[value].copy()
-            file[value] = 2.5 * np.log10(file[value])
             b = file[value].copy()
                             
         file2 = BasicCalcs.rolling_mid(file.copy(),"30D")
@@ -295,6 +303,7 @@ class Plots:
             "orchid", "plum", "slateblue", "turquoise", "violet", "darkcyan", 
             "darkorchid", "mediumorchid"
         ]
+
         
         cameras = cam.unique()  
         c2 = []
@@ -383,8 +392,14 @@ class Plots:
         def speichern(event):
             x = np.concatenate((x_1, x_2))
             y = np.concatenate((y_1, y_2))
-            x = x.astype('datetime64[s]').astype('O')
-            x = BasicCalcs.Datetime_in_Unix(x)
+            #x = x.astype('datetime64[s]').astype('O')
+            #x = BasicCalcs.Datetime_in_Unix(x)
+            mjd_list = []
+
+            for dt in x:
+                time = Time(dt)
+                mjd_list.append(time.mjd)
+            x = mjd_list
             speicherdata = pd.DataFrame({'time': x, 'flux': y})
             speicherdata.to_csv(f'{name}_liste.csv', index=False)
             print(f"\ngespeichert als: {name}_liste.csv\n")
@@ -449,6 +464,7 @@ class Plots:
                 return f"New: {name2}\nOld:{name}" 
         t = titleName(name,liste2, prefix, newname)
         #ax.set_title(f"Galaxy: {name}\n{liste2.loc[liste2['name'] == name, liste2.columns != 'name'].to_string(index=False)}")
+
         ax.set_title(t)
         ax.plot(x1, y1, zorder=10, label="30 Tage", color="red")
         ax.scatter(x_1, y_1, c=c3, alpha=0.4, zorder=5, marker="x")  # plot verschobene orginalpunkte
@@ -568,6 +584,7 @@ if True:
             if len(show)<=0:
                 print("Keine Galaxien vorhanden mit diesen Kriterien")
                 exit()
+            print(f"show: {show["name"]}")
             Plots.show_plots(show["name"], cat = 1)
         elif zeichen == "!=":
             show = data[(data['category'] != float(cat)) & (data['category'] >= 0)]
@@ -580,7 +597,7 @@ if True:
             if len(show)<=0:
                 print("Keine Galaxien vorhanden mit diesen Kriterien")
                 exit()
-            Plots.show_plots(show["name"], cat = 1)        
+            Plots.show_plots(show["name"], cat = 1)
 
         
         
