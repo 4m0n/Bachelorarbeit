@@ -281,13 +281,13 @@ class Plots:
             # Relative Mag
             file[value] = 2.5 * np.log10(file[value])
             file = BasicCalcs.normalize_null(file)
-            file[value] = file[value]/min(file[value])
+            #file[value] = file[value]/min(file[value])
             a = file[value].copy()
             b = file[value].copy()
-                            
         file2 = BasicCalcs.rolling_mid(file.copy(),"30D")
         x, y, cam = file.index.copy(), file[value].copy(), file["Camera"].copy()
         x1, y1 = file2.index.copy(), file2[value].copy()
+        print(f"file: \n{file}\nfile2:\n{file2}\nx,y:{x,y}\nx1,x2:{x1,y1}")
         # Kamera farben
         
         farben = [
@@ -464,7 +464,6 @@ class Plots:
                 return f"New: {name2}\nOld:{name}" 
         t = titleName(name,liste2, prefix, newname)
         #ax.set_title(f"Galaxy: {name}\n{liste2.loc[liste2['name'] == name, liste2.columns != 'name'].to_string(index=False)}")
-
         ax.set_title(t)
         ax.plot(x1, y1, zorder=10, label="30 Tage", color="red")
         ax.scatter(x_1, y_1, c=c3, alpha=0.4, zorder=5, marker="x")  # plot verschobene orginalpunkte

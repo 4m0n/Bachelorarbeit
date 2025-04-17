@@ -24,16 +24,21 @@ ExampleGalaxies:
   test: &test ["NGC4593"]
   fehler: &fehler ["NGC1566","NGC4593","NGC4151"]
 Plots:
-  TargetGalaxies: *test
-  ShowAllPlots: true # zeigt jede Galaxie einzeln
+  TargetGalaxies: *empty
+  ShowAllPlots: false # zeigt jede Galaxie einzeln
   IgnoreConditions: false # zeigt alle Plots und nicht nur die, die die Bedingungen erfüllen
-  ShowGroupPlot: true # zeigt alle Galaxien als Punkte in einem Plot
-  ShowGroupPlotAll: true
+  ShowGroupPlot: false # zeigt alle Galaxien als Punkte in einem Plot
+  ShowGroupPlotAll: false
   ShowFourierPlot: false
   ShowClassifyPlot: false
   sortedPlot: false
   changeActivity: false
   statisticalDistribution: false
+  showMatchesOld: false
+  showMatches:
+    show: true
+    showPlot: true
+
 Thresholds:
   F_threshold: 0.01
   R_threshold: 1.2

@@ -169,6 +169,72 @@ class Conditions:
 CONDITION = Conditions().main
 
 class Plots:
+
+    @staticmethod
+    def plotMateches(df,df_names):
+        fig, ax = plt.subplots(figsize=(10, 8))
+        sns.heatmap(df, annot=True, cmap='Blues', linewidths=.5, linecolor='black',
+                    cbar_kws={'label': 'Correlation'})
+        plt.title('Heatmap of Values', fontsize=18)
+        plt.xlabel('berechnet', fontsize=14)
+        plt.ylabel('manuell', fontsize=14)
+        plt.xticks(rotation=45, ha='right', fontsize=12)
+        plt.yticks(rotation=0, fontsize=12)
+
+        def on_click(event):
+            if event.inaxes == ax:  # Check if the click is inside the heatmap
+                x, y = int(event.xdata), int(event.ydata)  # Round to nearest index
+                if 0 <= x < len(normalized_df.columns) and 0 <= y < len(normalized_df.index):
+                    x_label = normalized_df.columns[x]
+                    y_label = normalized_df.index[y]
+
+                    # Retrieve the corresponding data
+                    SN = df_names[x_label][y_label]
+                    plot = SN
+
+                    print(f"\n\n======== PLOTS len:{len(plot)}========\nn")
+                    print(f"\nx = {x_label} ===== y = {y_label}\n")
+                    # Generate a new plot for each value in `plot`
+                    for val in plot:
+                        fig_new, ax_new = plt.subplots()
+                        Plots.plot_curves(val,True)
+                        plt.show(block=False)
+                        plt.pause(0.1)
+                        if input("nächster Plot: (break for exit) ") == "break":
+                            print("exit")
+                            plt.close()
+                            break
+
+                        plt.close()
+
+        fig.canvas.mpl_connect('button_press_event', on_click)
+        plt.show()
+
+        plt.close()
+    @staticmethod
+    def matchesPlot(df):
+        df = df.drop(columns=["name"])
+        df.set_index("category", inplace=True)
+
+        category_counts = df.groupby("category")["match"].value_counts().unstack(fill_value=0)
+        category_counts.drop(columns=["match: False - Notes: Leer, Calc: Leer"], inplace=True)
+        category_counts = category_counts.drop(index=False)
+        category_counts["corr"] = category_counts[True]/(category_counts[False] + category_counts[True])
+
+        heatmap_data = pd.pivot_table(category_counts, values="corr", index="category", columns="category", fill_value=0)
+
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(heatmap_data, annot=True, cmap='Blues', linewidths=.5, linecolor='black', cbar_kws={'label': 'Correlation'})
+        plt.title('Heatmap of Values', fontsize=18)
+        plt.xlabel('X Name', fontsize=14)
+        plt.ylabel('Y Name', fontsize=14)
+        plt.xticks(rotation=45, ha='right', fontsize=12)
+        plt.yticks(rotation=0, fontsize=12)
+        plt.show()
+        plt.close()
+
+
+
     def statisticalDistribution(df):
         groups = pd.DataFrame()
         def count_true(columne):
@@ -472,7 +538,7 @@ class Plots:
             plt.close()
         return corr,geloscht,len(x)
 
-    def plot_curves(name):
+    def plot_curves(name,deactivePlot=False):
 
         file2 = FileManager.load_data(name)
         file = BasicCalcs.normalize_null(file2)
@@ -530,21 +596,23 @@ class Plots:
         # except: tr_R = np.inf
         # try: tr_amplitude = round(amp_diff*100)/100
         # except: tr_amplitude = np.inf
-        print(name)
         redshift = galaxy_active.loc[galaxy_active["name"] == name, "redshift"].values
         if redshift > 0.027:
             redshift = "Neu"
         else:
             redshift = "Alt"
+
+        compareString,_,_ = FindActive.compareCategories(name)
         if name in galaxy_active["name"].values:
             if not CONDITION(**params):
                 #plt.title(f"NICHT VARIABEL Galaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\nTR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
-                plt.title(f"NICHT VARIABEL Galaxy: {name} - {redshift}")
+                plt.title(f"NICHT VARIABEL Galaxy: {name} - {redshift}\n{compareString}")
             else:
                 #plt.title(f"VARIABEL \nGalaxy: {name}, cuts: {cuts} \nTH F: {F_threshold} Activity F: {tr_F_var}\nTR R: {R_threshold} Activity R: {tr_R}\n TR Amp: {amp_diff_threshold} Amp: {tr_amplitude}, T = {round(T/86400)} Jahre")
-                plt.title(f"VARIABEL \nGalaxy: {name} - {redshift}")
+                plt.title(f"VARIABEL \nGalaxy: {name} - {redshift}\n{compareString}")
         else:
             plt.title(f"Galaxy: {name} - nicht gefunden")
+
 
         plt.plot(x1,y1,zorder=10, label="30 Tage", color = "red")
         plt.scatter(x_1,y_1,c = c3, alpha=0.4, zorder=5, marker = "x") # plot verschobene orginalpunkte
@@ -567,8 +635,6 @@ class Plots:
         #plt.plot(x,rolling_mid+rolling_std, label = "Standartabweichung", color = "black",alpha = 0.5,zorder = 6)
         #plt.plot(x,rolling_mid-rolling_std, label = "Standartabweichung", color = "black",alpha = 0.5,zorder = 6)
 
-        
-        
         # ============================
         
         plt.grid(color='grey', linestyle='--', linewidth=0.5)
@@ -576,8 +642,9 @@ class Plots:
         plt.ylabel("Fluss (normiert auf 1)", fontsize=12)
         plt.legend(fontsize=10, frameon=True, fancybox=True, framealpha=0.7)
         plt.tight_layout()
-        plt.show()
-        plt.close()
+        if deactivePlot == False:
+            plt.show()
+            plt.close()
 
 
 class FileManager:
@@ -743,6 +810,151 @@ class BasicCalcs:
         return datetime
 
 class FindActive:
+    @staticmethod
+    def GetCategroies():
+        files = pd.read_csv("sortedcurves.csv")
+        matches = pd.DataFrame()
+        noteskategorien = {
+            1: "inactive",
+            2: "leichte var",
+            3: "mittlere var",
+            4: "Anstieg/Abfall",
+            5: "starke var",
+            6: "Periode >2J",
+            7: "Periode 0.5-2J",
+            8: "Spezialfälle",
+            9: "SN",
+        }
+        noteskategorienCalc = {
+            0: "periodic",
+            1: "linear",
+            2: "supernova",
+            3: "F_var_R",
+            4: "periodicFast",
+            5: "inactive"
+        }
+        df = pd.DataFrame(0, index=noteskategorienCalc.values(), columns=noteskategorien.values())
+        df_names = pd.DataFrame(index=noteskategorienCalc.values(), columns=noteskategorien.values(), dtype=object)
+
+        for col in df_names.columns:
+            for row in df_names.index:
+                df_names.at[row, col] = []
+
+        check = 0
+        check1 = 0
+        for val in files["Unnamed: 0"].values:
+            check1 += 1
+            galNotes = pd.read_csv("Lichtkurven/galaxienotes.csv") # notes
+            galCalc = pd.read_csv("Lichtkurven/sortedcurves.csv") # algorithm
+            galCalc = galCalc.rename_axis("name", axis="index")
+
+            galNotes["name"] = galNotes["name"].str.lower().str.replace(" ", "")
+            galCalc["name"] = galCalc["name"].str.lower().str.replace(" ", "")
+            nameCompare = val.lower().replace(" ", "")
+
+            catNotes = galNotes.loc[galNotes["name"] == nameCompare,"category"].values
+            catCalc = galCalc.loc[galCalc["name"] == nameCompare].values
+            try:
+                notesCat = noteskategorien[catNotes[0]]
+            except:
+                notesCat = "inactive"
+
+
+
+            calcTrue = []
+            calcTrueNames = ""
+            try:
+                catCalc = catCalc[0]
+            except:
+                catCalc = ['name','(False, 0.0)',False,False,'(False, 0)',False,False,1]
+
+            inactive = True
+            for i in range(len(catCalc)-2):
+                if i == 0:
+                    continue
+                if (isinstance(catCalc[i], str) and "True" in catCalc[i]) or (isinstance(catCalc[i], bool) and True == catCalc[i]):
+                    calcTrue.append(noteskategorienCalc[i-1])
+                    calcTrueNames = val
+                    inactive = False
+            if inactive:
+                calcTrue.append("inactive")
+                calcTrueNames = val
+
+            for value in calcTrue:
+                df.loc[value, notesCat] += 1
+                df_names.loc[value, notesCat].append(calcTrueNames)
+                check += 1
+
+
+        print(df_names)
+        # notesCat: F_var_R
+        # calcTrue: [F_var_r,linear]
+        print(df)
+
+        # Calculate the total sum
+        total_sum = df.values.sum()
+
+        print(f"Total sum:{total_sum} insgesamt:{check} - obere schleife: {check1}")
+        return df,df_names
+
+    @staticmethod
+    def MatchCategory(notes, calc):
+        if len(notes) == 0 or len(calc) == 0:
+            print("ehm")
+            return f"match: False - Notes: Leer, Calc: Leer", False,False
+        calc = calc[0]
+        noteskategorienCalc = {
+            0: "periodic",
+            1: "linear",
+            2: "supernova",
+            3: "F_var_R",
+            4: "periodicFast",
+        }
+        noteskategorien = {
+            1: "inactive",
+            2: "leichte var",
+            3: "mittlere var",
+            4: "Anstieg/Abfall",
+            5: "starke var",
+            6: "Periode >2J",
+            7: "Periode 0.5-2J",
+            8: "Spezialfälle",
+            9: "SN",
+        }
+        calcTrue = []
+        for i in range(len(calc)-2):
+            if i == 0:
+                continue
+            if (isinstance(calc[i], str) and "True" in calc[i]) or (isinstance(calc[i], bool) and True == calc[i]):
+                calcTrue.append(noteskategorienCalc[i-1])
+        print(f"notes: {notes}")
+        print(notes[0])
+        if notes[0] == 0:
+            notes[0] =1
+        notesTrue = noteskategorien[notes[0]]
+        match = False
+        if notesTrue in calcTrue:
+            match = True
+        return match,notesTrue,calcTrue
+    @staticmethod
+    def compareCategories(name):
+        galNotes = pd.read_csv("Lichtkurven/galaxienotes.csv")
+        galCalc = pd.read_csv("Lichtkurven/sortedcurves.csv")
+        galCalc = galCalc.rename_axis("name", axis="index")
+
+        galNotes["name"] = galNotes["name"].str.lower().str.replace(" ", "")
+        galCalc["name"] = galCalc["name"].str.lower().str.replace(" ", "")
+
+
+        nameCompare = name.lower().replace(" ", "")
+        catNotes = galNotes.loc[galNotes["name"] == nameCompare,"category"].values
+        catCalc = galCalc.loc[galCalc["name"] == nameCompare].values
+
+        match,notesTrue,calcTrue = FindActive.MatchCategory(catNotes, catCalc)
+        compareString = f"from Notes: {notesTrue}\nCalculated: {', '.join(calcTrue)}"
+
+        return compareString, match,notesTrue
+
     def absoluteMag(name):
         name = name.replace(" ","").lower()
         galaxy_active = pd.read_csv("pyasassn_tool/mainTargets.csv",delimiter="|")
@@ -1210,7 +1422,31 @@ if config["Plots"]["changeActivity"]:
             if CONDITION(**params,classify=True) or config["Plots"]["changeActivity"]:
                 FindActive.changingActivity(i[:-4],plot = True)
    
-   
+if config["Plots"]["showMatchesOld"]:
+    files = pd.read_csv("sortedcurves.csv")
+    matches = []
+    for val in files["Unnamed: 0"].values:
+        _, match,category = FindActive.compareCategories(val)
+        matches.append({"name": val, "match": match, "category": category})
+    matches_df = pd.DataFrame(matches)
+    # Count occurrences of True and False
+    Plots.matchesPlot(matches_df)
+if config["Plots"]["showMatches"]["show"]:
+    df, df_names = FindActive.GetCategroies()
+    column_sums = df.sum()
+    normalized_df = df / column_sums
+    if config["Plots"]["showMatches"]["showPlot"]:
+        Plots.plotMateches(normalized_df,df_names)
+
+    SN = df_names["SN"]["inactive"]
+
+    plot = SN
+
+    for val in plot:
+        Plots.plot_curves(val)
+
+
+
 """
     TODO: group plot correlation für alle kombinationen durchrechnen lassen und dann ausgeben
     TODO: SDSSJ15242 sollte langzeit periodisch sein
