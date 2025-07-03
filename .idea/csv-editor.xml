@@ -290,7 +290,35 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="/final_light_curves/1SAXJ16506+0437.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="/final_light_curves/1WGAJ1611.8-6037.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/final_light_curves/3C120.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/final_light_curves/3C66.0B.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/final_light_curves/ESO141-G55.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
@@ -305,6 +333,13 @@
           </value>
         </entry>
         <entry key="/final_light_curves/IC4687.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/final_light_curves/IRAS11215-2806.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
@@ -340,6 +375,13 @@
           </value>
         </entry>
         <entry key="/final_light_curves/Mark817.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/final_light_curves/NGC1566.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />

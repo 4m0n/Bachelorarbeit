@@ -28,16 +28,16 @@ Plots:
   ShowAllPlots: false # zeigt jede Galaxie einzeln
   IgnoreConditions: false # zeigt alle Plots und nicht nur die, die die Bedingungen erfüllen
   ShowGroupPlot: false # zeigt alle Galaxien als Punkte in einem Plot
-  ShowGroupPlotAll: false
+  ShowGroupPlotAll: false # heatmap parameter gegeneinander
   ShowFourierPlot: false
-  ShowClassifyPlot: false
+  ShowClassifyPlot: false # zeigt im Terminal alle Galaxien nach absteigender Reinfolge mit Filtern
   sortedPlot: false
-  changeActivity: false
+  changeActivity: false # plot nur für filter überprüfung - unwichtig
   statisticalDistribution: false
   showMatchesOld: false
   showMatches:
-    show: true
-    showPlot: true
+    show: false
+    showPlot: false
 
 Thresholds:
   F_threshold: 0.01

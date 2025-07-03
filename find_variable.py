@@ -68,12 +68,12 @@ class Conditions:
         for boolean, value in results:
             if isinstance(value, float):  # Überprüfen, ob es eine Zahl ist
                 # Formatieren auf 3 signifikante Stellen mit wissenschaftlicher Notation
-                formatted_value = f"{value:.3e}"  
+                formatted_value = f"{value:.3e}"
             else:
                 formatted_value = value
             formatted_results.append((boolean, formatted_value))
         return formatted_results
-    def __init__(self,R=0,F=0,amp_diff=0,T=0,Dt = 5e8,std = 0,up = 0,down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0,StartEndDiff = 0, redshift = -1,periodicFast = 0, magnitude = 0, classify = False):
+    def __init__(self,R=0,F=0,amp_diff=0,T=0,Dt = 5e8,std = 0,up = 0,down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0,StartEndDiff = 0, redshift = -1,periodicFast = 0, magnitude = 0, periodicFastFreq = 0, amplitude = 0, classify = False):
         self.R = R
         self.F = F
         self.amp_diff = amp_diff
@@ -92,7 +92,9 @@ class Conditions:
         self.redshift = redshift
         self.periodicFast = periodicFast
         self.magnitude = magnitude
-    def main(self,*, R=0,F=0,amp_diff=0,T=0,Dt = 5e8, std = 0, up = 0, down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0, StartEndDiff = 0, redshift = -1,periodicFast = 0, magnitude = 0, classify = False):
+        self.periodicFastFreq = periodicFastFreq
+        self.amplitude = amplitude
+    def main(self,*, R=0,F=0,amp_diff=0,T=0,Dt = 5e8, std = 0, up = 0, down = 0,mean = 0,peakA = 0, peakC = 0,lange = 0, periodicpercent = 0, StartEndDiff = 0, redshift = -1,periodicFast = 0, magnitude = 0, periodicFastFreq = 0 ,amplitude = 0, classify = False):
         self.R = R
         self.F = F
         self.amp_diff = amp_diff
@@ -111,61 +113,66 @@ class Conditions:
         self.redshift = redshift
         self.periodicFast = periodicFast
         self.magnitude = magnitude
+        self.periodicFastFreq = periodicFastFreq
+        self.amplitude = amplitude
         if classify == False:
             return Conditions.periodicFast(self) and Conditions.minPoints(self) and not Conditions.supernova(self)
             #return Conditions.F_var_R(self)[0] and Conditions.minPoints(self) #(Conditions.periodic(self) or Conditions.linear(self)) and Conditions.minPoints(self) #and Conditions.minPoints(self)
         elif classify:
             return Conditions.periodic(self), Conditions.linear(self), Conditions.supernova(self), Conditions.F_var_R(self), Conditions.periodicFast(self), Conditions.minPoints(self)
-    
+
     def F_var_R(self):
         bedingung = self.R > R_threshold and F_threshold < self.F
         #bedingung = F_threshold < self.F
         #console.print(f"R: {self.R} - {self.R > R_threshold} and F: {self.F} - {self.F > F_threshold} ---> {bedingung}")
         return bedingung, self.R+self.F
     def periodic(self):
+        cond = (self.amp_diff > amp_diff_threshold and
+                    self.T > T_threshold[0] and
+                    self.T / (60 * 60 * 24) * 365 < self.Dt * 2) and self.T > 1e8
+        cond =  self.amplitude >= 0.15
         if self.classify == False:
-            return (self.amp_diff > amp_diff_threshold and
-                    self.T > T_threshold[0] and
-                    self.T / (60 * 60 * 24) * 365 < self.Dt * 2)
+            return cond
         else:
-            return (self.amp_diff > amp_diff_threshold and
-                    self.T > T_threshold[0] and
-                    self.T / (60 * 60 * 24) * 365 < self.Dt * 2), self.periodicpercent *100
+            return cond, self.periodicpercent * 100
     def periodic2(self):
         return self.amp_diff > amp_diff_threshold/2 and self.T / (60 * 60 * 24) * 365 < 365*10 and self.T /(60 * 60 * 24) * 365 > 50
 
     def linear(self):
-        return (self.T / (60 * 60 * 24) * 365 > self.Dt * 2) and (self.amp_diff > amp_diff_threshold * 2)
+        return (1/(self.T) / (60 * 60 * 24) * 365 > self.Dt * 2) and (self.amplitude > 0.5)
 
     def supernova(self):
         peak = False
         width = False
         height = False
         std1 = False
-        if self.peakA > 0.5 and self.peakA <= 1.6:
+        if self.peakA > 0.25 and self.peakA <= 3:
             peak = True
-        if self.peakC > 400_000 and self.peakC <= 6_000_000:
+        if self.peakC > 400_000 and self.peakC <= 10_000_000:
             width = True
         if self.mean < 0.5:
             height = True
         if self.std < 0.12:
             std1 = True
         return peak and width and height and std1
-    
+
     def changeActivity(self):
-        linear = ((self.T / (60 * 60 * 24) * 365 > self.Dt * 2) and 
+        linear = ((self.T / (60 * 60 * 24) * 365 > self.Dt * 2) and
                 self.amp_diff > amp_diff_threshold * 4)
-        
-        periodic = (self.amp_diff > amp_diff_threshold and 
-                self.T > T_threshold[0] and 
-                self.T / (60 * 60 * 24) * 365 < self.Dt * 2) and self.T / (60 * 60 * 24) * 365 > self.Dt/4 
-        
-        return (abs(self.StartEndDiff) > 0.25) #and (linear or periodic)  
+
+        periodic = (self.amp_diff > amp_diff_threshold and
+                self.T > T_threshold[0] and
+                self.T / (60 * 60 * 24) * 365 < self.Dt * 2) and self.T / (60 * 60 * 24) * 365 > self.Dt/4
+
+        return (abs(self.StartEndDiff) > 0.25) #and (linear or periodic)
 
     def periodicFast(self):
-        return self.periodicFast >= 0.2
+        return self.periodicFast >= 0.1
     def minPoints(self):
         return self.lange > 250
+    def printAllParameters(self):
+        string = f"R: {self.R}, F: {self.F}, amp_diff: {self.amp_diff}, T: {self.T}, Dt: {self.Dt}, std: {self.std}, up: {self.up}, down: {self.down}, mean: {self.mean}, peakA: {self.peakA}, peakC: {self.peakC}, lange: {self.lange}, periodicpercent: {self.periodicpercent}, StartEndDiff: {self.StartEndDiff}, classify: {self.classify}, redshift: {self.redshift}, periodicFast: {self.periodicFast}, magnitude: {self.magnitude}, periodicFastFreq: {self.periodicFastFreq}, amplitude: {self.amplitude}"
+        return string
 CONDITION = Conditions().main
 
 class Plots:
@@ -197,6 +204,8 @@ class Plots:
                     # Generate a new plot for each value in `plot`
                     for val in plot:
                         fig_new, ax_new = plt.subplots()
+                        params = FindActive.load_parameters(val)
+                        print(f"=== {val} ===\n{Conditions(**params).printAllParameters()}")
                         Plots.plot_curves(val,True)
                         plt.show(block=False)
                         plt.pause(0.1)
@@ -246,9 +255,16 @@ class Plots:
         groups = df.apply(count_true, axis=0)
         groups = groups.to_frame().T
         groups.index = ["count"]
-        groups.loc['count_div_100'] = groups.loc['count'] / len(df) * 100
+        groups.loc['percent'] = groups.loc['count'] / len(df) * 100
         console.print(len(df))
         console.print(groups)
+        df = df.drop(columns=["minPoint","True_Count"])
+
+        print(df)
+        rows_with_true = df.map(lambda x: x[0] if isinstance(x, tuple) else x).any(axis=1)
+        count = rows_with_true.sum()
+        print(f"Variable Insgesamt: {count}, percent: {groups.loc["count","total"]/count}")
+
 
         #console.print(groups.to_latex())
         
@@ -357,9 +373,9 @@ class Plots:
         
     def standart1(x=None,y=None,z=None,plot = True):
 
-        name, F_var, R, F_and_R, cuts, amplitude, amp_diff, T, periodicpercent,Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift, periodicFast,magnitude = FindActive.load_parameters(variante=1)
+        name, F_var, R, F_and_R, cuts, amplitude, amp_diff, T, periodicpercent, Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift, periodicFast, magnitude, periodicFastFreq = FindActive.load_parameters(variante=1)
         if x == None:
-            x = "F_var"
+            x = "F_and_R"
         if y == None:
             y = "periodicFast"
         if z == None:
@@ -448,6 +464,10 @@ class Plots:
                     x = magnitude
                     x_title = "magnitude"
                     threshold_x = 0.1
+                case "periodicFastFreq":
+                    x = periodicFastFreq
+                    x_title = "periodicFastFreq"
+                    threshold_x = 0.1
             return x, x_title, threshold_x
         
         x, x_title, threshold_x = setup(x)
@@ -488,7 +508,15 @@ class Plots:
         elif y_title == "cuts":
             corrData = corrData[(corrData["x"] >= 0) & (corrData["y"] >= 0)]
         else:
-            corrData = corrData[(corrData["x"] > 0) & (corrData["y"] > 0)]
+            try:
+                corrData = corrData[(corrData["x"] > 0) & (corrData["y"] > 0)]
+            except:
+                for val in corrData["x"]:
+                    print(f"{val} - {type(val)}")
+                for val in corrData["y"]:
+                    print(f"{val} - {type(val)}")
+                print(f"datax: {corrData['x']}\n datay: {corrData['y']}")
+                print(f"x: {x_title} y: {y_title}")
         corrData['z_x'] = (corrData['x'] - corrData['x'].mean()) / corrData['x'].std()
         corrData['z_y'] = (corrData['y'] - corrData['y'].mean()) / corrData['y'].std()
         threshold = 3
@@ -621,9 +649,9 @@ class Plots:
         #plt.errorbar(x_1, y_1, yerr=error_1, alpha=0.4, zorder=5, label='V', ecolor=c3, linestyle="None", barsabove=True,fmt="")
         #plt.errorbar(x_2, y_2, yerr=error_2, alpha=0.4, zorder=5, label="g",ecolor=c4, linestyle="None")
 
-        x_temp,y_temp,_,_,_,_ = FindActive.periodic(name)
+        #x_temp,y_temp,_,_,_,_ = FindActive.periodic(name)
         #x_temp,y_temp,_,_ = FindActive.peak(name)
-        plt.plot(x_temp,y_temp, label = "Sinus Fit", color = "green",zorder = 9)
+        #plt.plot(x_temp,y_temp, label = "Sinus Fit", color = "green",zorder = 9)
         
         # ==== Standartabweichung ====
         
@@ -702,17 +730,23 @@ class FileManager:
         std,up,down,mean,lange = FindActive.StdPeak(name)
         StartEndDiff = FindActive.changingActivity(name)
         redshift = FileManager.loadRedshift(name)
-        periodicFast = FindActive.FourierFastPeriodic(name)
+        periodicFast,periodicFastFreq = FindActive.FourierFastPeriodic(name)
         magnitude = FindActive.absoluteMag(name)
         if os.path.isfile(file_path) == False:
             with open(file_path, 'w') as datei:
-                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast,magnitude\n")
+                datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast,periodicFastFreq,magnitude\n")
         with open(file_path, 'a') as datei:
-            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{periodicpercent},{deltaT.days},{std},{up},{down},{mean},{peakA},{peakC},{lange},{StartEndDiff},{redshift},{periodicFast},{magnitude}\n")
+            datei.write(f"{name},{Fvar},{R},{Fvar*R},{cuts},{amplitude},{amp_diff},{period},{periodicpercent},{deltaT.days},{std},{up},{down},{mean},{peakA},{peakC},{lange},{StartEndDiff},{redshift},{periodicFast},{periodicFastFreq},{magnitude}\n")
         return
     
     
 class BasicCalcs:
+    @staticmethod
+    def secondToYears(value):
+        return value/(365*24*60*60)
+    @staticmethod
+    def yearsToSeconds(value):
+        return value*(365*24*60*60)
     def derivation(x,y):
         m = []
         for i in range(len(x)-1):
@@ -842,10 +876,11 @@ class FindActive:
 
         check = 0
         check1 = 0
+        galNotes = pd.read_csv("Lichtkurven/galaxienotes.csv") # notes
+        galCalc = pd.read_csv("sortedcurves.csv") # algorithm
         for val in files["Unnamed: 0"].values:
             check1 += 1
-            galNotes = pd.read_csv("Lichtkurven/galaxienotes.csv") # notes
-            galCalc = pd.read_csv("Lichtkurven/sortedcurves.csv") # algorithm
+            galCalc.columns = ["name"] + list(galCalc.columns[1:])  # Add "name" as the first column header
             galCalc = galCalc.rename_axis("name", axis="index")
 
             galNotes["name"] = galNotes["name"].str.lower().str.replace(" ", "")
@@ -939,7 +974,8 @@ class FindActive:
     @staticmethod
     def compareCategories(name):
         galNotes = pd.read_csv("Lichtkurven/galaxienotes.csv")
-        galCalc = pd.read_csv("Lichtkurven/sortedcurves.csv")
+        galCalc = pd.read_csv("sortedcurves.csv")
+        galCalc.columns = ["name"] + list(galCalc.columns[1:])  # Add "name" as the first column header
         galCalc = galCalc.rename_axis("name", axis="index")
 
         galNotes["name"] = galNotes["name"].str.lower().str.replace(" ", "")
@@ -992,7 +1028,7 @@ class FindActive:
     def load_parameters(name="", variante = 0):
         
         if variante == 0:
-            galaxy_active = pd.read_csv(path + "new_active_galaxies.csv")
+            galaxy_active = pd.read_csv(path + "new_active_galaxies.csv",delimiter=",")
             try:
                 cuts = galaxy_active.loc[galaxy_active['name'] == name, 'cuts'].values[0]
             except:
@@ -1000,6 +1036,7 @@ class FindActive:
             F = galaxy_active.loc[galaxy_active["name"] == name, "activity"].values[0]
             R = galaxy_active.loc[galaxy_active["name"] == name, "R"].values[0]
             amp_diff = galaxy_active.loc[galaxy_active["name"] == name, "amp_diff"].values[0]
+            amplitude = galaxy_active.loc[galaxy_active["name"] == name, "amplitude"].values[0]
             T = galaxy_active.loc[galaxy_active["name"] == name, "period"].values[0]
             Dt = galaxy_active.loc[galaxy_active["name"] == name, "Dt"].values[0]
             std = galaxy_active.loc[galaxy_active["name"] == name, "std"].values[0]
@@ -1012,22 +1049,16 @@ class FindActive:
             periodicpercent = galaxy_active.loc[galaxy_active["name"] == name, "periodicpercent"].values[0]
             StartEndDiff = galaxy_active.loc[galaxy_active["name"] == name, "StartEndDiff"].values[0]
             redshift = galaxy_active.loc[galaxy_active["name"] == name, "redshift"].values[0]
-            periodicFast = galaxy_active.loc[galaxy_active["name"] == name, "periodicFast"].values[0]
+            periodicFast = float(galaxy_active.loc[galaxy_active["name"] == name, "periodicFast"].values[0])
+            periodicFastFreq = galaxy_active.loc[galaxy_active["name"] == name, "periodicFastFreq"].values[0]
             magnitude = float(galaxy_active.loc[galaxy_active["name"] == name, "magnitude"].values[0])
             # liste umwandeln
-            periodicFast = np.array(ast.literal_eval(periodicFast))[0]
-            ehm = {
-                "R": R, "F": F, "amp_diff": amp_diff, "T": T, "Dt": Dt,
-                "std": std, "up": up, "down": down, "mean": mean,
-                "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent,"StartEndDiff":StartEndDiff, "redshift":redshift,
-                "periodicFast":periodicFast,"magnitude":magnitude
-            }
-            
+
             return {
                 "R": R, "F": F, "amp_diff": amp_diff, "T": T, "Dt": Dt,
                 "std": std, "up": up, "down": down, "mean": mean,
                 "peakA": peakA, "peakC": peakC, "lange": lange, "periodicpercent": periodicpercent,"StartEndDiff":StartEndDiff, "redshift":redshift,
-                "periodicFast":periodicFast,"magnitude":magnitude
+                "periodicFast":periodicFast,"magnitude":magnitude,"periodicFastFreq":periodicFastFreq,"amplitude":amplitude
             }
         elif variante == 1:
             path1 = path+"new_active_galaxies.csv"
@@ -1050,11 +1081,11 @@ class FindActive:
             lange = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=16) # pointCount
             StartEndDiff = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=17) # StartEndDiff
             redshift = np.loadtxt(path1, delimiter=',', skiprows=1, usecols=18)  # redshift
-            periodicFast = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=19,dtype=str)
-            periodicFast = np.array([float(ast.literal_eval(item)[0]) for item in periodicFast])
-            magnitude = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=20,dtype=float)
+            periodicFast = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=19,dtype=float)
+            periodicFastFreq = np.loadtxt(path1, delimiter=',', skiprows=1, usecols=20, dtype=float)
+            magnitude = np.loadtxt(path1, delimiter=',', skiprows=1,usecols=21,dtype=float)
             #periodicFast = np.array(ast.literal_eval(periodicFast))[0]
-            return name, F_var, R, F_and_R, cuts, amplitude,amp_diff, T, periodicpercent, Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift,periodicFast,magnitude
+            return name, F_var, R, F_and_R, cuts, amplitude,amp_diff, T, periodicpercent, Dt, std, up, down, mean, peakA, peakC, lange, StartEndDiff, redshift,periodicFast,magnitude,periodicFastFreq
             
             
     def FourierLombScargle(name,plot = False):
@@ -1115,6 +1146,7 @@ class FindActive:
             for i in date:
                 unix.append(i.timestamp())
             return unix
+
         def normalize(file):
             value = "Flux"
             curve = file.copy()
@@ -1138,9 +1170,19 @@ class FindActive:
         for val in file["Flux"].values:
             y.append(val)
 
-        frequency, power = LombScargle(t, y).autopower(maximum_frequency=1e-7, samples_per_peak=40)
-        freq = pd.DataFrame({"Frequency": frequency, "Power": power})
-        return [max(freq.loc[freq["Frequency"]>= 1e-8, "Power"].values)]
+        # Frequenzbereich für 3,17 bis 50 Jahre:
+        min_freq = 1/(2*365.25 *24*60*60) #1 / (2 * 365.25 * 24 * 3600)  # 2 jahre
+        max_freq = 1 / (0.08 * 365.25 * 24 * 3600)  # ~100 tage
+
+        frequency, power = LombScargle(t, y).autopower(
+            minimum_frequency=min_freq,
+            maximum_frequency=max_freq,
+            samples_per_peak=40
+        )
+        max_power_idx = np.argmax(power)
+        dominant_freq = frequency[max_power_idx]
+        dominant_power = power[max_power_idx]
+        return dominant_power,dominant_freq  # Maximaler Power-Wert im gewählten Bereich
 
 
 
@@ -1187,89 +1229,126 @@ class FindActive:
         if len(params) < 4:
             print("eh")
             return x,y,0,0
-        return x,y,params[0],params[2] 
-        
-    
-    def periodic(name, plot = False):
+        return x,y,params[0],params[2]
+
+    def periodic(name, plot=False):
+        def Datetime_in_Unix(date):
+            unix = []
+            for i in date:
+                unix.append(i.timestamp())
+            return unix
+
+        def normalize(file):
+            value = "Flux"
+            curve = file.copy()
+            shift = 0
+            if curve[value].min() <= 0:
+                shift = curve[value].min()
+                curve[value] = curve[value] - shift + 1
+
+            curve[f"{value} Error"] = curve[f"{value} Error"] / curve[value].max()
+            curve[value] = curve[value] / curve[value].max()
+            return curve
+
+        file = pd.read_csv(f"final_light_curves/{name}.csv")
+        curve = file.copy()
+        file = normalize(file)
+
+        t = Datetime_in_Unix(pd.to_datetime(file["JD"]))
+        mint = min(t)
+        for i in range(len(t)):
+            t[i] -= mint
+        y = []
+        for val in file["Flux"].values:
+            y.append(val)
+
+        # Frequenzbereich für 3,17 bis 50 Jahre:
+        min_freq = 1 / (20 * 365.25 * 24 * 3600)  #  (30 Jahre)
+        max_freq = 1 / (2 * 365.25 * 24 * 3600)  #  (2 Jahre)
+
+        frequency, power = LombScargle(t, y).autopower(
+            minimum_frequency=min_freq,
+            maximum_frequency=max_freq,
+            samples_per_peak=40
+        )
+        max_power_idx = np.argmax(power)
+        dominant_freq = frequency[max_power_idx]
+        dominant_power = power[max_power_idx]
+
+        # ===== Sin Plot =====
+
+        time_diff = (t[-1] - t[0])
+        amp = curve[value].max() - curve[value].min()
+        peak = 0
+        amp_diff = 0
+        x = [0,0]
+        y = [0,0]
+        try:
+            params, params_covariance = optimize.curve_fit(BasicCalcs.fit_func_sin, t, file[value].values,
+                                                           p0=[amp, 1 / time_diff, 0, file[value].mean()],
+                                                           maxfev=100000)  # a * np.sin(b * x + c) + d
+            x = np.linspace(min(t), max(t), 10000)
+            y = BasicCalcs.fit_func_sin(x, *params)
+
+            Tsin = abs(params[1])
+            if plot:
+                return x, y, Tsin
+            x = BasicCalcs.Unix_in_Datetime(x)
+            T, peaks = FindActive.FourierLombScargle(name)
+            for i in range(len(T)):
+                if T[i] / Tsin < 1.2 and T[i] / Tsin > 0.8:
+                    peak = peaks[i]
+                    amp_diff = y.max() - y.min()
+
+        except:
+            print("kein sin")
+            if plot:
+                return [0,0],[0,0],0
+
+
+        return x,y,dominant_power,amp_diff,dominant_freq,peak # Maximaler Power-Wert im gewählten Bereich
+
+
+    def periodic3(name): # kopie von periodic als backup
         curve = FileManager.load_data(name)
         file2 = BasicCalcs.rolling_mid(curve)
         file2 = BasicCalcs.normalize_null(curve)
-        #file2 = BasicCalcs.rolling_mid(file2)
+        # file2 = BasicCalcs.rolling_mid(file2)
         file2.dropna(inplace=True)
         maximum = curve[value].max()
         numeric_index = BasicCalcs.Datetime_in_Unix(file2.index)
-        
+
         # ===== FIT ======
         if len(numeric_index) < 20:
-            return [],[],0,0,0,0
-        time_diff = (numeric_index[-1] - numeric_index[0])         
+            return [], [], 0, 0, 0, 0
+        time_diff = (numeric_index[-1] - numeric_index[0])
         amp = curve[value].max() - curve[value].min()
 
         try:
-            params, params_covariance = optimize.curve_fit(BasicCalcs.fit_func_sin, numeric_index, file2[value].values, p0=[amp, 1/time_diff, 0, file2[value].mean()],maxfev=100000) # a * np.sin(b * x + c) + d 
+            params, params_covariance = optimize.curve_fit(BasicCalcs.fit_func_sin, numeric_index, file2[value].values,
+                                                           p0=[amp, 1 / time_diff, 0, file2[value].mean()],
+                                                           maxfev=100000)  # a * np.sin(b * x + c) + d
         except:
-            return [],[],0,0,0,0
+            return [], [], 0, 0, 0, 0
         x = np.linspace(min(numeric_index), max(numeric_index), 10000)
         y = BasicCalcs.fit_func_sin(x, *params)
-        
+
         Tsin = abs(params[1])
         if plot:
-            return x,y,Tsin
-        
+            return x, y, Tsin
+
         x = BasicCalcs.Unix_in_Datetime(x)
-        T,peaks = FindActive.FourierLombScargle(name)
-        #console.print(f"Tsin: {Tsin}, T: {T}, Peaks: {peaks}")
+        T, peaks = FindActive.FourierLombScargle(name)
+        # console.print(f"Tsin: {Tsin}, T: {T}, Peaks: {peaks}")
         for i in range(len(T)):
-            if T[i]/Tsin < 1.2 and T[i]/Tsin > 0.8:
-                #console.print(f"Period T: {T[i]} Tsin: {Tsin} T/Tsin: {T[i]/Tsin}")
-                return x,y, abs(params[0]), (y.max() - y.min()),(1/abs(params[1]*60)),peaks[i]
+            if T[i] / Tsin < 1.2 and T[i] / Tsin > 0.8:
+                # console.print(f"Period T: {T[i]} Tsin: {Tsin} T/Tsin: {T[i]/Tsin}")
+                return x, y, abs(params[0]), (y.max() - y.min()), (1 / abs(params[1] * 60)), peaks[i]
             else:
                 pass
-                #console.print(f"Passt nicht {i} Period T: {T[i]} Tsin: {Tsin} T/Tsin: {T[i]/Tsin}")
+                # console.print(f"Passt nicht {i} Period T: {T[i]} Tsin: {Tsin} T/Tsin: {T[i]/Tsin}")
 
-
-
-        
-        
-        return x,y, abs(params[0]), (y.max() - y.min()),(1/abs(params[1]*60)),0 # T in sekunden       
-    
-    def periodic3(name):
-        # =====
-        
-        #Klappt nicht so schön
-        
-        # =====
-        curve = FileManager.load_data(name)
-        file2 = BasicCalcs.rolling_mid(curve)
-        file2 = BasicCalcs.normalize_null(curve)
-        #file2 = BasicCalcs.rolling_mid(file2)
-        file2.dropna(inplace=True)
-        maximum = curve[value].max()
-        numeric_index = BasicCalcs.Datetime_in_Unix(file2.index)
-        
-        # ===== FIT ======
-        if len(numeric_index) < 20:
-            return [],[],0,0,0
-        time_diff = (numeric_index[-1] - numeric_index[0]) 
-        
-        amp = curve[value].max() - curve[value].min()
-        try:
-            params, params_covariance = optimize.curve_fit(BasicCalcs.fit_func_sin2, numeric_index, file2[value].values, p0=[500, 1e12, 0, file2[value].mean(),20, 1e9, 0, file2[value].mean(),0.5, 1e7, 0, file2[value].mean()],maxfev=100000,
-                                                        bounds=([-10_000,1e8,-4,-5_000,
-                                                                 -100,1e6,-4,-100,
-                                                                 -2,1e4,-4,-2],
-                                                                [10_000,1e15,4,5_000,
-                                                                 100,1e10,4,100,
-                                                                 2,1e8,4,2]))
-            a,e,i,b,f,j  = params[0],params[4],params[8],params[1],params[5],params[9]
-            console.print(f"Params: {a,e,i,b,f,j}")
-        except:
-            console.log("No Parameters found")
-            return [],[],0,0,0
-        x = np.linspace(min(numeric_index), max(numeric_index), 10000)
-        y = BasicCalcs.fit_func_sin2(x, *params)
-        x = BasicCalcs.Unix_in_Datetime(x)
-        return x,y, abs(params[0]), (y.max() - y.min()),(1/abs(params[1]*60)) # T in sekunden 
+        return x, y, abs(params[0]), (y.max() - y.min()), (1 / abs(params[1] * 60)), 0  # T in sekunden
     
     def StdPeak(name):
         curve = FileManager.load_data(name)
@@ -1306,7 +1385,7 @@ class FindActive:
 def start():
     if not config["ReCalculateOnlyNew"] or not os.path.exists(path+"new_active_galaxies.csv"):
         with open(path+"new_active_galaxies.csv", 'w') as datei:
-            datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast,magnitude\n")
+            datei.write("name,activity,R,activity*R,cuts,amplitude,amp_diff,period,periodicpercent,Dt,std,up,down,mean,peakA,peakC,pointCount,StartEndDiff,redshift,periodicFast,periodicFastFreq,magnitude\n")
     galaxy_active = pd.read_csv(path+"new_active_galaxies.csv") # wurden bereits berechnet
     files = [f for f in listdir(load_path) if isfile(join(load_path, f))]
     show_galaxies_lower = [item.replace(" ","").lower()for item in show_galaxies]
@@ -1329,13 +1408,13 @@ if config["ReCalculate"] or config["ReCalculateOnlyNew"]:
     start()
 if config["Plots"]["ShowAllPlots"]: 
     Plots.show_plots()
-if config["Plots"]["ShowGroupPlot"]:
+if config["Plots"]["ShowGroupPlot"] or config["Plots"]["ShowGroupPlotAll"]:
     correlation = pd.DataFrame(columns=["xName","yName","correlation","removed","len","delete"])
 
     if config["Plots"]["ShowGroupPlotAll"] == False:
         Plots.standart1()
     else:
-        parameters = ["F_var", "R", "F_and_R", "cuts", "amplitude", "amp_diff", "T", "periodicpercent","Dt", "std", "up", "down", "mean", "peakA", "peakC", "lange", "StartEndDiff", "redshift", "periodicFast","magnitude"]
+        parameters = ["F_var", "R", "F_and_R", "cuts", "amplitude","amp_diff", "T", "periodicpercent", "Dt", "std", "up", "down", "mean", "peakA", "peakC", "lange", "StartEndDiff", "redshift","periodicFast","magnitude","periodicFastFreq"]
         for x in range(len(parameters)):
             for y in range(x+1,len(parameters)):
                 corr,deleted,lange = Plots.standart1(x=parameters[x], y=parameters[y], plot=False)
@@ -1396,17 +1475,18 @@ if config["Plots"]["ShowClassifyPlot"] or config["Plots"]["sortedPlot"] or confi
     def count_true(row):
         return sum(1 for value in row if (value is True) or (isinstance(value, tuple) and value[0] == True))
 
+
     groups["True_Count"] = groups.apply(count_true, axis=1)
     df_sorted = groups.sort_values(by="True_Count", ascending=False)
     df_sorted = df_sorted[df_sorted["minPoint"] == True]
     #df_sorted = df_sorted.drop(columns=["True_Count"])
-    
+    df_sorted.to_csv("sortedcurves.csv")
+
     if config["Plots"]["statisticalDistribution"]:
         Plots.statisticalDistribution(df_sorted)
-    if config["Plots"]["ShowClassifyPlot"]:    
+    if config["Plots"]["ShowClassifyPlot"]:
         console.print(df_sorted.to_string())
     if config["Plots"]["sortedPlot"]:
-        df_sorted.to_csv("sortedcurves.csv")
         Plots.show_plots(df_sorted.index)
             
 if config["Plots"]["changeActivity"]:
@@ -1442,8 +1522,8 @@ if config["Plots"]["showMatches"]["show"]:
 
     plot = SN
 
-    for val in plot:
-        Plots.plot_curves(val)
+    # for val in plot:
+    #     Plots.plot_curves(val)
 
 
 
@@ -1454,6 +1534,8 @@ if config["Plots"]["showMatches"]["show"]:
     
     TODO: fehlen von kategorien anzeigen yes
     TODO: abs magnitude runterladen
+    
+    TODO: Lichtkurven mit webscrapping nach echter klassifizierung absuchen
 """
 
 

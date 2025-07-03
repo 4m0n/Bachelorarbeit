@@ -1,7 +1,7 @@
 
 
 Demo: false # speichert und überschreibt nichts
-ReCalculateAll: true
+ReCalculateAll: false
 Cutter: true
 ShowBothCuts: true
 Plots:

@@ -10,6 +10,7 @@ from prompt_toolkit import prompt
 from matplotlib.widgets import TextBox, Button
 import datetime
 from astropy.time import Time
+from astropy.timeseries import LombScargle
 
 load_path = "final_light_curves/"
 active_path = "activity_curves/"
@@ -24,7 +25,9 @@ kategorien = {
     5: "Kategorie 5",
 }
 
+
 class FileManager:
+    @staticmethod
     def load_data(file):
         if os.path.exists(load_path + file + ".csv"):
             data = pd.read_csv(load_path + file + ".csv", index_col = 0)
@@ -40,6 +43,65 @@ class FileManager:
         else: cuts = -1
         return cuts
 class BasicCalcs:
+    @staticmethod
+    def FourierPeriodic(file):
+        def Datetime_in_Unix(date):
+            unix = []
+            for i in date:
+                unix.append(i.timestamp())
+            return unix
+
+        def normalize(file):
+            value = "Flux"
+            curve = file.copy()
+            shift = 0
+            if curve[value].min() <= 0:
+                shift = curve[value].min()
+                curve[value] = curve[value] - shift + 1
+
+            curve[f"{value} Error"] = curve[f"{value} Error"] / curve[value].max()
+            curve[value] = curve[value] / curve[value].max()
+            return curve
+
+
+        file = normalize(file.copy())
+
+        t = Datetime_in_Unix(pd.to_datetime(file["JD"]))
+        mint = min(t)
+        for i in range(len(t)):
+            t[i] -= mint
+        y = []
+        for val in file["Flux"].values:
+            y.append(val)
+
+        # Frequenzbereich für 3,17 bis 50 Jahre:
+        min_freq = 1/(2*365.25 *24*60*60) #1 / (2 * 365.25 * 24 * 3600)  # 2 jahre
+        min_freq = 1/(20*365.25 *24*60*60)
+        max_freq = 1 / (0.08 * 365.25 * 24 * 3600)  # ~100 tage
+
+        frequency, power = LombScargle(t, y).autopower(
+            minimum_frequency=min_freq,
+            maximum_frequency=max_freq,
+            samples_per_peak=40
+        )
+        max_power_idx = np.argmax(power)
+        dominant_freq = frequency[max_power_idx]
+        dominant_power = power[max_power_idx]
+
+        # periode durch lücken
+        y = []
+        for val in t:
+            y.append(1)
+        frequency2, power2 = LombScargle(t, y).autopower(
+            minimum_frequency=min_freq,
+            maximum_frequency=max_freq,
+            samples_per_peak=40
+        )
+        plt.scatter(t, y)
+        plt.show()
+        # ====================
+
+        return frequency,power,frequency2, power2
     def Datetime_in_Unix(date):
         unix = []
         for i in date:
@@ -183,7 +245,6 @@ class Plots:
             Plots.plot_curves(file)
     
     def plot_curves2(name):
-        print(f"name : {name}")
         file2 = FileManager.load_data(name)
         #file = BasicCalcs.normalize_null(file2)
         file = file2.copy()
@@ -215,7 +276,6 @@ class Plots:
         c2 = []
         for i in cam:
             c2.append(farben[np.where(cameras == i)[0][0]])
-        print("jo3")
         c3 = []
         c4 = []
         for index, i in enumerate(cam):
@@ -237,7 +297,6 @@ class Plots:
             return value
 
         # Anwenden der Funktion auf alle Zellen
-        print("jo1")
         def remove_numbers(value):
             if isinstance(value, str):  # Prüfen, ob der Wert ein String ist
                 if value[0] == "(":
@@ -269,6 +328,28 @@ class Plots:
         plt.tight_layout()
         plt.show()
 
+    @staticmethod
+    def plot_fourier(freq,pow,freq2,pow2):
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6))
+        T = 1/(freq*365*60*60*24)
+        T2 = 1/(freq2*365*60*60*24)
+        ax1.plot(freq,pow, color = "black")
+        ax1.plot(freq2, pow2, color = "red",alpha = 0.4)
+        ax1.grid(color='grey', linestyle='--', linewidth=0.5)
+        ax1.set_xlabel("Frequenz [1/s]")
+        ax1.set_ylabel("Power")
+
+        ax2.plot(T,pow, color = "black")
+        ax2.plot(T2, pow2, color="red",alpha=0.4)
+        ax2.grid(color='grey', linestyle='--', linewidth=0.5)
+        ax2.set_xlabel("Time [years]")
+        ax2.set_ylabel("Power")
+
+        plt.tight_layout()
+        plt.show()
+
+
+
     def plot_curves(name):
     
         file = FileManager.load_data(name)
@@ -287,7 +368,6 @@ class Plots:
         file2 = BasicCalcs.rolling_mid(file.copy(),"30D")
         x, y, cam = file.index.copy(), file[value].copy(), file["Camera"].copy()
         x1, y1 = file2.index.copy(), file2[value].copy()
-        print(f"file: \n{file}\nfile2:\n{file2}\nx,y:{x,y}\nx1,x2:{x1,y1}")
         # Kamera farben
         
         farben = [
@@ -466,8 +546,8 @@ class Plots:
         #ax.set_title(f"Galaxy: {name}\n{liste2.loc[liste2['name'] == name, liste2.columns != 'name'].to_string(index=False)}")
         ax.set_title(t)
         ax.plot(x1, y1, zorder=10, label="30 Tage", color="red")
-        ax.scatter(x_1, y_1, c=c3, alpha=0.4, zorder=5, marker="x")  # plot verschobene orginalpunkte
-        ax.scatter(x_2, y_2, c=c4, alpha=0.4, zorder=5, marker="o")  # plot verschobene orginalpunkte
+        ax.scatter(x_1, y_1, c=c3, alpha=0.4, zorder=5, marker="x",s = 12)  # plot verschobene orginalpunkte
+        ax.scatter(x_2, y_2, c=c4, alpha=0.4, zorder=5, marker="o",s = 12)  # plot verschobene orginalpunkte
 
         ax.grid(color='grey', linestyle='--', linewidth=0.5)
         ax.set_xlabel("Zeit", fontsize=12)
@@ -597,6 +677,13 @@ if True:
                 print("Keine Galaxien vorhanden mit diesen Kriterien")
                 exit()
             Plots.show_plots(show["name"], cat = 1)
+    elif number == "5":
+        print("\n\n======= Fourier =======\n\n")
+        name = str(input(f"\n\nName der Galaxie (aus der Liste kopieren): "))
+        file = FileManager.load_data(name)
+        file = file.reset_index()
+        freq,pow,freq2,pow2 = BasicCalcs.FourierPeriodic(file)
+        Plots.plot_fourier(freq, pow, freq2, pow2)
 
         
         
@@ -605,3 +692,6 @@ if True:
         exit()
         
 # CGCG 49-155 = SDSS J15242+0451
+
+
+# beim plotten punkt größe selbst bestimmen, mittelwert zeit ändern + ausblenden

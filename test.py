@@ -3,13 +3,18 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-curve = pd.read_csv("light_curves/661430607288-light-curves(1).csv")
+data = pd.read_csv('activity_curves/new_active_galaxies.csv')
 
-#plt.scatter(curve["Flux"],curve["Mag"])
-#plt.show()
-fluss = 728
-print(f"Fluss: {fluss}, Mag:{2.5 * np.log10(fluss)}")
 
+def secondToYears(value):
+    return value / (365 * 24 * 60 * 60)
+#liste = secondToYears(data["period"].values).tolist()
+liste = data["periodicFast"]
+array = []
+for val in liste:
+    array.append(float(val[1:-1]))
+
+print(f"min: {min(array)}, max: {max(array)} median: {np.median(array)}")
 exit()
 def load(filepath):
     with open(filepath, 'r') as file:
